@@ -134,7 +134,7 @@ export default function App() {
   const [profileError, setProfileError] = useState('');
 
   const [portalOpen, setPortalOpen] = useState(true);
-  const [schoolRole, setSchoolRole] = useState<'admin' | 'counselor' | null>(null);
+  const [schoolRole, setSchoolRole] = useState<'admin' | 'counselor' | 'student' | null>(null);
   const [activeSection, setActiveSection] = useState<AppSection>('library');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
@@ -1669,13 +1669,7 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
 
   if (portalOpen || !firebaseUser || !profile) {
     return <AuthView ready={Boolean(firebaseUser && profile)} profileError={profileError} onRetryProfile={() => void retryProfileLoad()} onSchoolRole={(role) => {
-      if (role === 'student') {
-        setSchoolRole(null);
-        setExamInitialSubTab('school_grades');
-        setActiveSection('exam');
-      } else {
-        setSchoolRole(role);
-      }
+      setSchoolRole(role);
       setPortalOpen(false);
     }} onOpen={(section) => {
       setSchoolRole(null);
@@ -1690,8 +1684,27 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
     return (
       <main dir="rtl" className="min-h-screen bg-[#FAF9F6] px-4 py-10 text-slate-900">
         <div className="mx-auto max-w-xl space-y-5 rounded-2xl bg-white p-6 shadow-md">
-          <h1 className="text-2xl font-bold">{schoolRole === 'admin' ? 'لوحة إدارة المدرسة' : 'صفحة المرشد التربوي'}</h1>
-          <p>تم التحقق من صفة الحساب عبر Firebase. أدوات {schoolRole === 'admin' ? 'الإدارة' : 'الإرشاد'} والبيانات المشتركة تحتاج ربطها بنظام المدرسة وصلاحيات قاعدة البيانات قبل استخدامها.</p>
+          <h1 className="text-2xl font-bold">{schoolRole === 'admin' ? 'لوحة إدارة المدرسة' : schoolRole === 'counselor' ? 'صفحة المرشد التربوي' : 'درجات الطالب'}</h1>
+          {schoolRole === 'student' ? (
+            <section className="space-y-3">
+              <p className="text-sm text-slate-600">عرض الدرجات المسجلة لحسابك فقط. هذه الصفحة للقراءة ولا تسمح بتعديل الدرجات.</p>
+              {schoolGrades.length === 0 ? <p>لا توجد درجات مسجلة لهذا الحساب حالياً.</p> : (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-sm">
+                    <thead><tr className="bg-slate-100"><th className="p-2 text-right">المادة</th><th className="p-2 text-right">الامتحان</th><th className="p-2 text-right">الدرجة</th></tr></thead>
+                    <tbody>{schoolGrades.map((grade) => (
+                      <tr key={grade.id} className="border-b">
+                        <td className="p-2">{grade.subject}</td><td className="p-2">{grade.examLabel}</td>
+                        <td className="p-2" dir="ltr">{grade.score} / {grade.maxScore}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          ) : (
+            <p>تم التحقق من صفة الحساب عبر Firebase. أدوات {schoolRole === 'admin' ? 'الإدارة' : 'الإرشاد'} والبيانات المشتركة تحتاج ربطها بنظام المدرسة وصلاحيات قاعدة البيانات قبل استخدامها.</p>
+          )}
           <button className="rounded-lg bg-blue-700 px-4 py-2 text-white" onClick={() => { setSchoolRole(null); setPortalOpen(true); }}>العودة للمعلم الذكي</button>
         </div>
       </main>
