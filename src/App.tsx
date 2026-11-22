@@ -134,6 +134,7 @@ export default function App() {
   const [profileError, setProfileError] = useState('');
 
   const [portalOpen, setPortalOpen] = useState(true);
+  const [schoolRole, setSchoolRole] = useState<'admin' | 'counselor' | null>(null);
   const [activeSection, setActiveSection] = useState<AppSection>('library');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
@@ -1667,10 +1668,34 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
   }
 
   if (portalOpen || !firebaseUser || !profile) {
-    return <AuthView ready={Boolean(firebaseUser && profile)} profileError={profileError} onRetryProfile={() => void retryProfileLoad()} onOpen={(section) => {
+    return <AuthView ready={Boolean(firebaseUser && profile)} profileError={profileError} onRetryProfile={() => void retryProfileLoad()} onSchoolRole={(role) => {
+      if (role === 'student') {
+        setSchoolRole(null);
+        setExamInitialSubTab('school_grades');
+        setActiveSection('exam');
+      } else {
+        setSchoolRole(role);
+      }
+      setPortalOpen(false);
+    }} onOpen={(section) => {
+      setSchoolRole(null);
       setActiveSection(section);
       setPortalOpen(false);
     }} />;
+  }
+
+  // Staff access is based only on server-issued Firebase role claims; the
+  // school pages cannot be unlocked by a password checked in browser code.
+  if (schoolRole) {
+    return (
+      <main dir="rtl" className="min-h-screen bg-[#FAF9F6] px-4 py-10 text-slate-900">
+        <div className="mx-auto max-w-xl space-y-5 rounded-2xl bg-white p-6 shadow-md">
+          <h1 className="text-2xl font-bold">{schoolRole === 'admin' ? 'لوحة إدارة المدرسة' : 'صفحة المرشد التربوي'}</h1>
+          <p>تم التحقق من صفة الحساب عبر Firebase. أدوات {schoolRole === 'admin' ? 'الإدارة' : 'الإرشاد'} والبيانات المشتركة تحتاج ربطها بنظام المدرسة وصلاحيات قاعدة البيانات قبل استخدامها.</p>
+          <button className="rounded-lg bg-blue-700 px-4 py-2 text-white" onClick={() => { setSchoolRole(null); setPortalOpen(true); }}>العودة للمعلم الذكي</button>
+        </div>
+      </main>
+    );
   }
 
   const navItems: { id: AppSection; label: string; icon: typeof Library }[] = [
