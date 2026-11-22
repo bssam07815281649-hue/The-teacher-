@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Award, BookOpen, CalendarDays, ChevronLeft, Eye, GraduationCap, Library, Megaphone, School, Target } from 'lucide-react';
-import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../services/firebase';
 import type { AppSection } from '../types';
 import tutorImage from '../assets/images/tutor_welcome_hero_1794766024306.jpg';
@@ -20,7 +20,7 @@ const destinations = [
   { id: 'plan', label: 'خطتي الدراسية', icon: CalendarDays },
 ] as const;
 
-export function AuthView({ ready, onOpen }: { ready: boolean; onOpen: (section: AppSection) => void }) {
+export function AuthView({ ready, onOpen, profileError, onRetryProfile }: { ready: boolean; onOpen: (section: AppSection) => void; profileError?: string; onRetryProfile?: () => void }) {
   const [tutor, setTutor] = useState(location.hash === '#tutor');
   const [pending, setPending] = useState<AppSection | null>(null);
   const [code, setCode] = useState('');
@@ -33,7 +33,10 @@ export function AuthView({ ready, onOpen }: { ready: boolean; onOpen: (section: 
     return () => window.removeEventListener('hashchange', changed);
   }, []);
   useEffect(() => {
-    if (ready && pending) onOpen(pending);
+    if (ready && pending) {
+      onOpen(pending);
+      setPending(null);
+    }
   }, [ready, pending, onOpen]);
   async function login(event: React.FormEvent) {
     event.preventDefault();
@@ -45,21 +48,28 @@ export function AuthView({ ready, onOpen }: { ready: boolean; onOpen: (section: 
     setBusy(true);
     try {
       const result = await signInWithEmailAndPassword(auth, match[1].toLowerCase() + '@codes.school.invalid', match[2]);
-      if (!result.user.emailVerified) {
-        await signOut(auth);
-        setMessage('الكود يحتاج تفعيل من إدارة المدرسة.');
-        return;
-      }
+      // Firebase has already validated the code account's password. School codes
+      // are not mailbox-based users and cannot complete an email verification flow.
+      if (!result.user) throw new Error('AUTH_NO_USER');
       setCode('');
-      setPending(pending ?? 'library');
-    } catch {
-      setMessage('تعذّر الدخول. تحقق من الكود والاتصال أو راجع إدارة المدرسة.');
+      setPending((current) => current ?? 'library');
+    } catch (error) {
+      const errorCode = (error as { code?: string }).code;
+      if (errorCode === 'auth/invalid-credential' || errorCode === 'auth/wrong-password' || errorCode === 'auth/user-not-found') {
+        setMessage('الكود غير صحيح أو غير مفعّل. راجع إدارة المدرسة.');
+      } else if (errorCode === 'auth/too-many-requests') {
+        setMessage('محاولات دخول كثيرة. حاول مرة ثانية لاحقاً.');
+      } else if (errorCode === 'auth/network-request-failed') {
+        setMessage('تعذّر الاتصال بالإنترنت. تحقق من الشبكة وحاول مجدداً.');
+      } else {
+        setMessage('تعذّر تسجيل الدخول حالياً. حاول مجدداً أو راجع إدارة المدرسة.');
+      }
     } finally { setBusy(false); }
   }
   function choose(section: AppSection) {
     if (ready) { onOpen(section); return; }
     setPending(section);
-    location.hash = 'school';
+    location.hash = '#school';
     setMessage('أدخل كود المدرسة لفتح هذا القسم.');
     requestAnimationFrame(() => input.current?.focus());
   }
@@ -73,7 +83,8 @@ export function AuthView({ ready, onOpen }: { ready: boolean; onOpen: (section: 
         <nav className="grid grid-cols-2 gap-3">{destinations.map(({id,label,icon: Icon}) => <button key={id} onClick={() => choose(id)} className={card + ' grid justify-items-center gap-2 px-2 py-6 font-bold hover:bg-violet-100'}><Icon size={34}/>{label}</button>)}</nav>
       </> : <>
         <form onSubmit={login} className="flex gap-2"><input ref={input} aria-label="أدخل الكود" placeholder="أدخل الكود" type="password" autoComplete="current-password" required={!ready} value={code} onChange={e=>setCode(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-violet-500 px-3 py-3"/><button disabled={busy} className="rounded-xl bg-violet-700 px-5 font-bold text-white">{busy ? 'جارٍ الدخول…' : 'دخول'}</button></form>
-        {message && <p role="status" className="text-sm">{message}</p>}
+        {message && <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">{message}</p>}
+        {profileError && <div role="alert" className="space-y-2 rounded-xl border border-amber-300 p-3 text-sm"><p>{profileError}</p>{onRetryProfile && <button type="button" onClick={onRetryProfile} className="rounded-lg bg-violet-700 px-3 py-2 text-white">إعادة تحميل حسابي</button>}</div>}
         <img className="aspect-[2.4/1] w-full rounded-2xl object-cover" src={school.image} alt="صورة توضيحية لمدرسة"/>
         <header className="space-y-1 text-center"><h1 className="text-3xl font-bold">{school.name}</h1><p>{school.year}</p></header>
         <section className="space-y-2">{sections.map(({title,body,icon: Icon})=><article key={title} className={card + ' flex items-center gap-3 p-3'}><Icon className="shrink-0 text-violet-600"/><div><h2 className="font-bold">{title}</h2><p className="text-sm leading-relaxed">{body}</p></div></article>)}</section>
