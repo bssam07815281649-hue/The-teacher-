@@ -132,6 +132,7 @@ export default function App() {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
+  const [portalOpen, setPortalOpen] = useState(true);
   const [activeSection, setActiveSection] = useState<AppSection>('library');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
@@ -1648,8 +1649,11 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
     );
   }
 
-  if (!firebaseUser || !profile) {
-    return <AuthView />;
+  if (portalOpen || !firebaseUser || !profile) {
+    return <AuthView ready={Boolean(firebaseUser && profile)} onOpen={(section) => {
+      setActiveSection(section);
+      setPortalOpen(false);
+    }} />;
   }
 
   const navItems: { id: AppSection; label: string; icon: typeof Library }[] = [
