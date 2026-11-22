@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Award, BookOpen, CalendarDays, ChevronLeft, Eye, GraduationCap, Library, Megaphone, School, Target } from 'lucide-react';
-import { signInWithEmailAndPassword, signInAnonymously } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
 import { auth } from '../services/firebase';
 import type { AppSection } from '../types';
 import tutorImage from '../assets/images/tutor_welcome_hero_1794766024306.jpg';
@@ -51,10 +51,25 @@ export function AuthView({ ready, onOpen, onSchoolRole, profileError, onRetryPro
     }
     setMessage('');
     const match = /^([a-z0-9]{6,32})\.([A-Za-z0-9_-]{12,128})$/i.exec(code.trim());
-    if (!match) { setMessage('تحقق من كتابة كود المدرسة كاملاً.'); return; }
+    if (!match && (code.trim().length < 6 || code.trim().length > 128)) { setMessage('تحقق من كتابة كود المدرسة كاملاً.'); return; }
     setBusy(true);
     try {
-      const result = await signInWithEmailAndPassword(auth, match[1].toLowerCase() + '@codes.school.invalid', match[2]);
+      let result;
+      if (match) {
+        result = await signInWithEmailAndPassword(auth, match[1].toLowerCase() + '@codes.school.invalid', match[2]);
+      } else {
+        const response = await fetch('/api/school/code-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: code.trim() }),
+        });
+        const data = await response.json().catch(() => ({})) as { token?: string; error?: string };
+        if (!response.ok || !data.token) {
+          setMessage(data.error || 'يتطلب كود المدير استضافة خادم المعلم الذكي وتفعيل حساب الإدارة.');
+          return;
+        }
+        result = await signInWithCustomToken(auth, data.token);
+      }
       // Firebase has already validated the code account's password. School codes
       // are not mailbox-based users and cannot complete an email verification flow.
       if (!result.user) throw new Error('AUTH_NO_USER');
