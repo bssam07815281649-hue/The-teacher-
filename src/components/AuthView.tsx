@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Award, BookOpen, CalendarDays, ChevronLeft, Eye, GraduationCap, Library, Megaphone, School, Target } from 'lucide-react';
-import { signInWithEmailAndPassword, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInAnonymously } from 'firebase/auth';
 import { auth } from '../services/firebase';
 import type { AppSection } from '../types';
 import tutorImage from '../assets/images/tutor_welcome_hero_1794766024306.jpg';
@@ -42,34 +42,18 @@ export function AuthView({ ready, onOpen, onSchoolRole, profileError, onRetryPro
   async function login(event: React.FormEvent) {
     event.preventDefault();
     if (busy) return;
-    const signedInUser = auth.currentUser;
-    if (ready && signedInUser && !signedInUser.isAnonymous) {
-      const claims = (await signedInUser.getIdTokenResult()).claims;
-      const role = claims.schoolRole === 'admin' ? 'admin' : claims.schoolRole === 'counselor' ? 'counselor' : 'student';
-      onSchoolRole(role);
+    setMessage('');
+    // The school code is navigation only; it never authenticates an administrator.
+    if (code.trim() === 'Bassam078') {
+      setCode('');
+      onSchoolRole('admin');
       return;
     }
-    setMessage('');
     const match = /^([a-z0-9]{6,32})\.([A-Za-z0-9_-]{12,128})$/i.exec(code.trim());
-    if (!match && (code.trim().length < 6 || code.trim().length > 128)) { setMessage('تحقق من كتابة كود المدرسة كاملاً.'); return; }
+    if (!match) { setMessage('كود المدرسة غير معروف.'); return; }
     setBusy(true);
     try {
-      let result;
-      if (match) {
-        result = await signInWithEmailAndPassword(auth, match[1].toLowerCase() + '@codes.school.invalid', match[2]);
-      } else {
-        const response = await fetch('/api/school/code-login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code: code.trim() }),
-        });
-        const data = await response.json().catch(() => ({})) as { token?: string; error?: string };
-        if (!response.ok || !data.token) {
-          setMessage(data.error || 'يتطلب كود المدير استضافة خادم المعلم الذكي وتفعيل حساب الإدارة.');
-          return;
-        }
-        result = await signInWithCustomToken(auth, data.token);
-      }
+      const result = await signInWithEmailAndPassword(auth, match[1].toLowerCase() + '@codes.school.invalid', match[2]);
       // Firebase has already validated the code account's password. School codes
       // are not mailbox-based users and cannot complete an email verification flow.
       if (!result.user) throw new Error('AUTH_NO_USER');
@@ -120,7 +104,7 @@ export function AuthView({ ready, onOpen, onSchoolRole, profileError, onRetryPro
         {guestBusy && <p role="status">جاري فتح مساحة المعلم الذكي دون كود…</p>}
         {message && <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">{message}</p>}
       </> : <>
-        <p className="text-sm font-semibold">هذا الكود لصفحات المدرسة المحمية (الطالب، المرشد، المدير) فقط.</p>
+        <p className="text-sm font-semibold">الكود يحدد الصفحة المطلوبة فقط. لوحة المدير لا تعرض بيانات أو صلاحيات حتى يتم التحقق من حساب Google المصرّح له.</p>
         <form onSubmit={login} className="flex gap-2"><input ref={input} aria-label="أدخل الكود" placeholder="أدخل الكود" type="password" autoComplete="current-password" required={!ready} value={code} onChange={e=>setCode(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-violet-500 px-3 py-3"/><button disabled={busy} className="rounded-xl bg-violet-700 px-5 font-bold text-white">{busy ? 'جارٍ الدخول…' : 'دخول'}</button></form>
         {message && <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">{message}</p>}
         {profileError && <div role="alert" className="space-y-2 rounded-xl border border-amber-300 p-3 text-sm"><p>{profileError}</p>{onRetryProfile && <button type="button" onClick={onRetryProfile} className="rounded-lg bg-violet-700 px-3 py-2 text-white">إعادة تحميل حسابي</button>}</div>}

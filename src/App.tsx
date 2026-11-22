@@ -96,6 +96,7 @@ import type {
   UserProfile,
 } from './types';
 import { AuthView } from './components/AuthView';
+import { AdminGate } from './components/AdminGate';
 import { LibrarySection } from './components/LibrarySection';
 import { LearnSection } from './components/LearnSection';
 import { StudyPlanSection } from './components/StudyPlanSection';
@@ -1667,6 +1668,10 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
     );
   }
 
+  if (schoolRole === 'admin') {
+    return <AdminGate onBack={() => { setSchoolRole(null); setPortalOpen(true); }} />;
+  }
+
   if (portalOpen || !firebaseUser || !profile) {
     return <AuthView ready={Boolean(firebaseUser && profile)} profileError={profileError} onRetryProfile={() => void retryProfileLoad()} onSchoolRole={(role) => {
       setSchoolRole(role);
@@ -1684,7 +1689,7 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
     return (
       <main dir="rtl" className="min-h-screen bg-[#FAF9F6] px-4 py-10 text-slate-900">
         <div className="mx-auto max-w-xl space-y-5 rounded-2xl bg-white p-6 shadow-md">
-          <h1 className="text-2xl font-bold">{schoolRole === 'admin' ? 'لوحة إدارة المدرسة' : schoolRole === 'counselor' ? 'صفحة المرشد التربوي' : 'درجات الطالب'}</h1>
+          <h1 className="text-2xl font-bold">{schoolRole === 'counselor' ? 'صفحة المرشد التربوي' : 'درجات الطالب'}</h1>
           {schoolRole === 'student' ? (
             <section className="space-y-3">
               <p className="text-sm text-slate-600">عرض الدرجات المسجلة لحسابك فقط. هذه الصفحة للقراءة ولا تسمح بتعديل الدرجات.</p>
@@ -1703,7 +1708,7 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
               )}
             </section>
           ) : (
-            <p>تم التحقق من صفة الحساب عبر Firebase. أدوات {schoolRole === 'admin' ? 'الإدارة' : 'الإرشاد'} والبيانات المشتركة تحتاج ربطها بنظام المدرسة وصلاحيات قاعدة البيانات قبل استخدامها.</p>
+            <p>تم التحقق من صفة الحساب عبر Firebase. أدوات الإرشاد والبيانات المشتركة تحتاج ربطها بنظام المدرسة وصلاحيات قاعدة البيانات قبل استخدامها.</p>
           )}
           <button className="rounded-lg bg-blue-700 px-4 py-2 text-white" onClick={() => { setSchoolRole(null); setPortalOpen(true); }}>العودة للمعلم الذكي</button>
         </div>
