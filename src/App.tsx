@@ -96,6 +96,7 @@ import type {
   UserProfile,
 } from './types';
 import { AuthView } from './components/AuthView';
+import { AdminGate } from './components/AdminGate';
 import { LibrarySection } from './components/LibrarySection';
 import { LearnSection } from './components/LearnSection';
 import { StudyPlanSection } from './components/StudyPlanSection';
@@ -1665,6 +1666,10 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
         <p className="text-sm text-slate-600 dark:text-slate-400">جاري تجهيز حسابك...</p>
       </div>
     );
+  }
+
+  if (schoolRole === 'admin') {
+    return <AdminGate onBack={() => { setSchoolRole(null); setPortalOpen(true); }} />;
   }
 
   if (portalOpen || !firebaseUser || !profile) {
