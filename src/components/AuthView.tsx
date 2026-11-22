@@ -42,8 +42,9 @@ export function AuthView({ ready, onOpen, onSchoolRole, profileError, onRetryPro
   async function login(event: React.FormEvent) {
     event.preventDefault();
     if (busy) return;
-    if (ready && !auth.currentUser?.isAnonymous) {
-      const claims = (await auth.currentUser.getIdTokenResult()).claims;
+    const signedInUser = auth.currentUser;
+    if (ready && signedInUser && !signedInUser.isAnonymous) {
+      const claims = (await signedInUser.getIdTokenResult()).claims;
       const role = claims.schoolRole === 'admin' ? 'admin' : claims.schoolRole === 'counselor' ? 'counselor' : 'student';
       onSchoolRole(role);
       return;
