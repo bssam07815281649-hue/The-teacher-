@@ -21,7 +21,7 @@ const destinations = [
 ] as const;
 
 export function AuthView({ ready, onOpen, onSchoolRole, profileError, onRetryProfile }: { ready: boolean; onOpen: (section: AppSection) => void; onSchoolRole: (role: 'admin' | 'counselor' | 'student') => void; profileError?: string; onRetryProfile?: () => void }) {
-  const [tutor, setTutor] = useState(location.hash !== '#school');
+  const [tutor, setTutor] = useState(location.hash === '#tutor');
   const [pending, setPending] = useState<AppSection | null>(null);
   const [code, setCode] = useState('');
   const [message, setMessage] = useState('');
@@ -29,7 +29,7 @@ export function AuthView({ ready, onOpen, onSchoolRole, profileError, onRetryPro
   const input = useRef<HTMLInputElement>(null);
   const [guestBusy, setGuestBusy] = useState(false);
   useEffect(() => {
-    const changed = () => { setTutor(location.hash !== '#school'); window.scrollTo(0, 0); };
+    const changed = () => { setTutor(location.hash === '#tutor'); window.scrollTo(0, 0); };
     window.addEventListener('hashchange', changed);
     return () => window.removeEventListener('hashchange', changed);
   }, []);
