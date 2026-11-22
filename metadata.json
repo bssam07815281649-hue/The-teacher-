@@ -1,0 +1,6 @@
+{
+  "name": "المعلم الذكي — AI Smart Tutor",
+  "description": "تطبيق ويب تعليمي ذكي يعمل كمدرس خصوصي ومساعد دراسي شخصي للطلاب باللغة العربية، مع عارض كتب تفاعلي، ومحادثة صوتية مباشرة، وخطط دراسية متكيفة، وامتحانات شفهية وكتابية.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
