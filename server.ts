@@ -1,5 +1,8 @@
 import 'dotenv/config';
 import fs from 'node:fs';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { initializeApp as initializeAdminApp, cert, getApps as getAdminApps } from 'firebase-admin/app';
+import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import http from 'node:http';
 import path from 'node:path';
 import express, { type Request, type Response, type NextFunction } from 'express';
@@ -416,6 +419,45 @@ async function bootstrapServer() {
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, model: GEMINI_TEXT_MODEL, liveModel: GEMINI_LIVE_MODEL });
+  });
+
+  // School administrator codes are verified only on the trusted server.
+  // Configure SCHOOL_ADMIN_CODE and FIREBASE_SERVICE_ACCOUNT_JSON in the
+  // server environment. Never place either secret in public frontend files.
+  const schoolCodeAttempts = new Map<string, { attempts: number; until: number }>();
+  app.post('/api/school/code-login', async (req: Request, res: Response) => {
+    const ip = req.ip || 'unknown';
+    const now = Date.now();
+    const previous = schoolCodeAttempts.get(ip);
+    if (previous && previous.until > now && previous.attempts >= 5) {
+      res.status(429).json({ error: 'محاولات كثيرة. حاول لاحقاً.' });
+      return;
+    }
+    const attempts = previous && previous.until > now ? previous.attempts + 1 : 1;
+    schoolCodeAttempts.set(ip, { attempts, until: now + 15 * 60_000 });
+
+    const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
+    const configured = process.env.SCHOOL_ADMIN_CODE || '';
+    const adminJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON || '';
+    if (!configured || !adminJson) {
+      res.status(503).json({ error: 'لم يتم تفعيل حساب المدير على الخادم بعد.' });
+      return;
+    }
+    const hash = (v: string) => createHash('sha256').update(v, 'utf8').digest();
+    if (!code || !timingSafeEqual(hash(code), hash(configured))) {
+      res.status(401).json({ error: 'كود الإدارة غير صحيح.' });
+      return;
+    }
+    try {
+      if (getAdminApps().length === 0) {
+        initializeAdminApp({ credential: cert(JSON.parse(adminJson)) });
+      }
+      const token = await getAdminAuth().createCustomToken('school-admin-primary', { schoolRole: 'admin' });
+      res.json({ token });
+    } catch (error) {
+      console.error('School administration authentication unavailable:', error);
+      res.status(503).json({ error: 'خدمة حساب المدير غير مهيأة حالياً.' });
+    }
   });
 
   // 1. Analyze single book page (OCR if scanned + concepts/diagrams/difficulty/time)
