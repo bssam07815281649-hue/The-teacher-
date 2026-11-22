@@ -66,6 +66,14 @@ const COMMON_SUBJECTS = [
   'الجغرافية',
 ];
 
+function parseGradeNumber(input: string): number {
+  const normalized = input.trim()
+    .replace(/[٠-٩]/g, digit => String(digit.charCodeAt(0) - 0x660))
+    .replace(/[۰-۹]/g, digit => String(digit.charCodeAt(0) - 0x6f0))
+    .replace('٫', '.');
+  return /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(normalized) ? Number(normalized) : NaN;
+}
+
 function getTodayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -217,18 +225,18 @@ export const SchoolGradesTab: React.FC<SchoolGradesTabProps> = ({
     setFormError('');
 
     const cleanSubject = subject.trim();
-    const numScore = Number(score);
-    const numMax = Number(maxScore);
+    const numScore = parseGradeNumber(score);
+    const numMax = parseGradeNumber(maxScore);
 
     if (!cleanSubject) {
       setFormError('يرجى كتابة اسم المادة الدراسية (مثل: الأحياء أو الفيزياء).');
       return;
     }
-    if (Number.isNaN(numMax) || numMax <= 0) {
+    if (!Number.isFinite(numMax) || numMax <= 0) {
       setFormError('يجب أن تكون الدرجة العظمى أكبر من صفر.');
       return;
     }
-    if (score.trim() === '' || Number.isNaN(numScore) || numScore < 0 || numScore > numMax) {
+    if (!Number.isFinite(numScore) || numScore < 0 || numScore > numMax) {
       setFormError(`يجب أن تكون الدرجة بين 0 و ${numMax}.`);
       return;
     }
@@ -469,9 +477,8 @@ export const SchoolGradesTab: React.FC<SchoolGradesTabProps> = ({
                 درجتك
               </label>
               <input
-                type="number"
-                step="0.5"
-                min={0}
+                type="text"
+                inputMode="decimal"
                 value={score}
                 onChange={(e) => setScore(e.target.value)}
                 placeholder="مثال: 14 أو 72"
@@ -485,9 +492,8 @@ export const SchoolGradesTab: React.FC<SchoolGradesTabProps> = ({
                 الدرجة من كم؟
               </label>
               <input
-                type="number"
-                step="1"
-                min={1}
+                type="text"
+                inputMode="decimal"
                 value={maxScore}
                 onChange={(e) => setMaxScore(e.target.value)}
                 placeholder="100 أو 20"
