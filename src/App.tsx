@@ -131,6 +131,7 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profileError, setProfileError] = useState('');
 
   const [portalOpen, setPortalOpen] = useState(true);
   const [activeSection, setActiveSection] = useState<AppSection>('library');
@@ -214,12 +215,15 @@ export default function App() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
+      setProfileError('');
       if (user) {
         try {
           const prof = await getOrCreateUserProfile(user);
           setProfile(prof);
         } catch (err) {
           console.error(err);
+          setProfile(null);
+          setProfileError('تم تسجيل الدخول، لكن تعذّر تحميل بيانات حسابك. تحقق من الاتصال أو صلاحيات Firebase ثم أعد المحاولة.');
         }
       } else {
         setProfile(null);
@@ -234,6 +238,19 @@ export default function App() {
       setAuthReady(true);
     });
     return () => unsub();
+  }, []);
+
+  const retryProfileLoad = useCallback(async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+    setProfileError('');
+    try {
+      const loaded = await getOrCreateUserProfile(user);
+      setProfile(loaded);
+    } catch (err) {
+      console.error(err);
+      setProfileError('تعذّر تحميل حسابك مرة أخرى. تحقق من الاتصال وصلاحيات Firebase.');
+    }
   }, []);
 
   // Theme sync on <html>
@@ -1650,7 +1667,7 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
   }
 
   if (portalOpen || !firebaseUser || !profile) {
-    return <AuthView ready={Boolean(firebaseUser && profile)} onOpen={(section) => {
+    return <AuthView ready={Boolean(firebaseUser && profile)} profileError={profileError} onRetryProfile={() => void retryProfileLoad()} onOpen={(section) => {
       setActiveSection(section);
       setPortalOpen(false);
     }} />;
