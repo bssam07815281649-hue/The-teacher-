@@ -20,7 +20,7 @@ const destinations = [
   { id: 'plan', label: 'خطتي الدراسية', icon: CalendarDays },
 ] as const;
 
-export function AuthView({ ready, onOpen, profileError, onRetryProfile }: { ready: boolean; onOpen: (section: AppSection) => void; profileError?: string; onRetryProfile?: () => void }) {
+export function AuthView({ ready, onOpen, onSchoolRole, profileError, onRetryProfile }: { ready: boolean; onOpen: (section: AppSection) => void; onSchoolRole: (role: 'admin' | 'counselor' | 'student') => void; profileError?: string; onRetryProfile?: () => void }) {
   const [tutor, setTutor] = useState(location.hash !== '#school');
   const [pending, setPending] = useState<AppSection | null>(null);
   const [code, setCode] = useState('');
@@ -42,7 +42,12 @@ export function AuthView({ ready, onOpen, profileError, onRetryProfile }: { read
   async function login(event: React.FormEvent) {
     event.preventDefault();
     if (busy) return;
-    if (ready && !auth.currentUser?.isAnonymous) { onOpen('exam'); return; }
+    if (ready && !auth.currentUser?.isAnonymous) {
+      const claims = (await auth.currentUser.getIdTokenResult()).claims;
+      const role = claims.schoolRole === 'admin' ? 'admin' : claims.schoolRole === 'counselor' ? 'counselor' : 'student';
+      onSchoolRole(role);
+      return;
+    }
     setMessage('');
     const match = /^([a-z0-9]{6,32})\.([A-Za-z0-9_-]{12,128})$/i.exec(code.trim());
     if (!match) { setMessage('تحقق من كتابة كود المدرسة كاملاً.'); return; }
@@ -53,8 +58,10 @@ export function AuthView({ ready, onOpen, profileError, onRetryProfile }: { read
       // are not mailbox-based users and cannot complete an email verification flow.
       if (!result.user) throw new Error('AUTH_NO_USER');
       setCode('');
-      // School codes lead to the protected school grades area, not the public tutor.
-      setPending('exam');
+      // Only server-issued Firebase custom claims can authorize staff pages.
+      const claims = (await result.user.getIdTokenResult()).claims;
+      const role = claims.schoolRole === 'admin' ? 'admin' : claims.schoolRole === 'counselor' ? 'counselor' : 'student';
+      onSchoolRole(role);
     } catch (error) {
       const errorCode = (error as { code?: string }).code;
       if (errorCode === 'auth/invalid-credential' || errorCode === 'auth/wrong-password' || errorCode === 'auth/user-not-found') {
