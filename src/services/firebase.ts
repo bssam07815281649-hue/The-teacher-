@@ -157,7 +157,7 @@ export async function getOrCreateUserProfile(user: User): Promise<UserProfile> {
     const profile: UserProfile = {
       uid: user.uid,
       displayName: clampStr(user.displayName || 'طالب', 160),
-      email: clampStr(user.email || '', 200),
+      email: clampStr(user.email || (user.isAnonymous ? `guest-${user.uid}@anonymous.school.invalid` : ''), 200),
       photoURL: clampStr(user.photoURL || '', 500),
       tutorLanguage: 'ar-msa',
       theme: 'light',

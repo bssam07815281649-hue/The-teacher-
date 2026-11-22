@@ -17,7 +17,7 @@ service cloud.firestore {
     }
 
     function isOwner(userId) {
-      return isVerifiedUser() && request.auth.uid == userId;
+      // All authenticated users may access only their own UID namespace, including\n      // anonymous tutor guests. Staff privileges are never inferred from this rule.\n      return isSignedIn() && request.auth.uid == userId;
     }
 
     function isValidId(id) {
