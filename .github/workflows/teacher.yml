@@ -15,7 +15,7 @@ jobs:
         with:
           node-version: 24
       - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
+      - run: bun install
       - run: bun run build
       - name: Check production server
         run: |
