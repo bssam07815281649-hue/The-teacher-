@@ -24,3 +24,25 @@ jobs:
           trap 'kill "$server_pid" || true' EXIT
           curl --retry 15 --retry-delay 1 --retry-connrefused -fsS http://localhost:3000/api/health
           curl -fsS http://localhost:3000/ | grep -q 'AI Smart Tutor'
+      - name: Build the GitHub Pages preview
+        run: bun run build --base=/The-teacher-/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Publish preview
+        id: deployment
+        uses: actions/deploy-pages@v4
