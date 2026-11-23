@@ -1,4 +1,4 @@
-import { auth } from './firebase';
+import { fetchAiQuota, getTutorAuthToken } from './aiClient';
 import type { LiveConnectionState, TutorLanguage } from '../types';
 
 export interface LiveToolCall {
@@ -136,20 +136,22 @@ export class GeminiLiveClient {
     void this.outputCtx.resume().catch(() => {});
     this.nextStartTime = this.outputCtx.currentTime;
 
-    const user = auth.currentUser;
-    if (!user) {
+    let token = '';
+    try {
+      token = await getTutorAuthToken(false);
+    } catch {
       this.cleanupAudioOnly();
-      this.callbacks.onError('يرجى تسجيل الدخول بحساب Google لاستخدام الاتصال الصوتي.');
+      this.callbacks.onError('تعذر بدء الجلسة الصوتية مع الخادم. تحقق من الاتصال ثم حاول مجدداً.');
       this.callbacks.onStatusChange('error');
       return;
     }
 
-    let token = '';
-    try {
-      token = await user.getIdToken();
-    } catch {
+    const quota = await fetchAiQuota();
+    if (quota && quota.live.remaining <= 0) {
       this.cleanupAudioOnly();
-      this.callbacks.onError('تعذر التحقق من جلسة الحساب. أعد تحميل الصفحة ثم حاول مجدداً.');
+      this.callbacks.onError(
+        `وصلت إلى الحد اليومي المسموح به للمكالمات الصوتية (${quota.live.limit} جلسات في اليوم) لحماية الحصة المجانية. يتجدد الرصيد تلقائياً عند منتصف الليل.`
+      );
       this.callbacks.onStatusChange('error');
       return;
     }

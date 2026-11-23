@@ -228,6 +228,181 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "userId", "subject", "examType", "examLabel", "score", "maxScore", "percentage", "examDate", "createdAt", "updatedAt"]
+    },
+    "SchoolRecord": {
+      "title": "SchoolRecord",
+      "description": "School profile synced by the Google-authenticated principal for Smart Student Record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 200 },
+        "academicYear": { "type": "string", "maxLength": 40 },
+        "directorate": { "type": "string", "maxLength": 160 },
+        "logoDataUrl": { "type": "string", "maxLength": 350000 },
+        "coverDataUrl": { "type": "string", "maxLength": 450000 },
+        "overview": { "type": "string", "maxLength": 4000 },
+        "vision": { "type": "string", "maxLength": 2000 },
+        "mission": { "type": "string", "maxLength": 2000 },
+        "goals": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "ownerUid", "name", "academicYear", "directorate", "createdAt", "updatedAt"]
+    },
+    "SchoolMember": {
+      "title": "SchoolMember",
+      "description": "Verified Firebase user role and section/student scope mapping for RBAC enforcement.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "role": { "type": "string", "enum": ["admin", "counselor", "student"] },
+        "sectionId": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "displayName": { "type": "string", "maxLength": 160 },
+        "status": { "type": "string", "enum": ["active", "revoked"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "schoolId", "ownerUid", "role", "status", "updatedAt"]
+    },
+    "SchoolAnnouncement": {
+      "title": "SchoolAnnouncement",
+      "description": "Pinned or general school announcement.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "maxLength": 200 },
+        "body": { "type": "string", "maxLength": 4000 },
+        "pinned": { "type": "boolean" },
+        "visibility": { "type": "string", "enum": ["public", "internal"] },
+        "authorName": { "type": "string", "maxLength": 160 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "ownerUid", "title", "body", "pinned", "visibility", "authorName", "createdAt", "updatedAt"]
+    },
+    "SchoolStage": {
+      "title": "SchoolStage",
+      "description": "Ordered grade level/stage within a school.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 160 },
+        "orderIndex": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "ownerUid", "name", "orderIndex", "updatedAt"]
+    },
+    "SchoolSection": {
+      "title": "SchoolSection",
+      "description": "Section inside a grade stage with assigned counselor metadata (no secret codes).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "stageId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 160 },
+        "counselorName": { "type": "string", "maxLength": 160 },
+        "counselorCodeStatus": { "type": "string", "enum": ["active", "revoked", "unset"] },
+        "orderIndex": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "ownerUid", "stageId", "name", "counselorName", "counselorCodeStatus", "orderIndex", "updatedAt"]
+    },
+    "SchoolStudent": {
+      "title": "SchoolStudent",
+      "description": "Student roster entry scoped to a section (no secret codes).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "sectionId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fullName": { "type": "string", "maxLength": 160 },
+        "status": { "type": "string", "enum": ["active", "inactive", "transferred"] },
+        "studentCodeStatus": { "type": "string", "enum": ["active", "revoked", "unset"] },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "ownerUid", "sectionId", "fullName", "status", "studentCodeStatus", "createdAt", "updatedAt"]
+    },
+    "SchoolAbsence": {
+      "title": "SchoolAbsence",
+      "description": "Recorded student absence within a section.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "sectionId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "date": { "type": "string", "maxLength": 20 },
+        "excuseType": { "type": "string", "enum": ["excused", "unexcused", "medical", "official"] },
+        "subjectName": { "type": "string", "maxLength": 120 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "recordedBy": { "type": "string", "maxLength": 160 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "ownerUid", "sectionId", "studentId", "date", "excuseType", "recordedBy", "createdAt", "updatedAt"]
+    },
+    "SchoolSubjectGradebook": {
+      "title": "SchoolSubjectGradebook",
+      "description": "Subject gradebook with Term 1, Midyear, Term 2, custom sub-records, cells, and Annual Pursuit settings.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "sectionId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 160 },
+        "payloadJson": { "type": "string", "maxLength": 350000 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "ownerUid", "sectionId", "name", "payloadJson", "updatedAt"]
+    },
+    "SchoolImportTemplate": {
+      "title": "SchoolImportTemplate",
+      "description": "Saved bounding-box sheet import template.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 160 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "boxesJson": { "type": "string", "maxLength": 60000 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "ownerUid", "name", "boxesJson", "createdAt"]
+    },
+    "SchoolAuditLog": {
+      "title": "SchoolAuditLog",
+      "description": "Append-only immutable audit log entry for all Smart Student Record mutations.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "actorName": { "type": "string", "maxLength": 160 },
+        "actorRole": { "type": "string", "enum": ["admin", "counselor", "student", "system"] },
+        "action": { "type": "string", "maxLength": 160 },
+        "targetType": { "type": "string", "maxLength": 80 },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "targetLabel": { "type": "string", "maxLength": 200 },
+        "prevValue": { "type": "string", "maxLength": 4000 },
+        "nextValue": { "type": "string", "maxLength": 4000 },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "ownerUid", "actorName", "actorRole", "action", "targetType", "targetId", "targetLabel", "prevValue", "nextValue", "timestamp"]
     }
   },
   "firestore": {
@@ -270,6 +445,46 @@
     "/users/{userId}/schoolGrades/{gradeId}": {
       "schema": { "$ref": "#/entities/SchoolGrade" },
       "description": "Student real school class grades organized by subject and exam type."
+    },
+    "/schools/{schoolId}": {
+      "schema": { "$ref": "#/entities/SchoolRecord" },
+      "description": "School profile for Smart Student Record."
+    },
+    "/schools/{schoolId}/members/{memberUid}": {
+      "schema": { "$ref": "#/entities/SchoolMember" },
+      "description": "Role and scope bindings for school members."
+    },
+    "/schools/{schoolId}/announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/SchoolAnnouncement" },
+      "description": "Pinned and general announcements."
+    },
+    "/schools/{schoolId}/stages/{stageId}": {
+      "schema": { "$ref": "#/entities/SchoolStage" },
+      "description": "Ordered grade stages."
+    },
+    "/schools/{schoolId}/sections/{sectionId}": {
+      "schema": { "$ref": "#/entities/SchoolSection" },
+      "description": "Sections and counselor assignment metadata."
+    },
+    "/schools/{schoolId}/students/{studentId}": {
+      "schema": { "$ref": "#/entities/SchoolStudent" },
+      "description": "Students scoped by section."
+    },
+    "/schools/{schoolId}/absences/{absenceId}": {
+      "schema": { "$ref": "#/entities/SchoolAbsence" },
+      "description": "Student absences scoped by section."
+    },
+    "/schools/{schoolId}/subjects/{subjectId}": {
+      "schema": { "$ref": "#/entities/SchoolSubjectGradebook" },
+      "description": "Subject gradebooks scoped by section."
+    },
+    "/schools/{schoolId}/templates/{templateId}": {
+      "schema": { "$ref": "#/entities/SchoolImportTemplate" },
+      "description": "Saved import bounding-box templates."
+    },
+    "/schools/{schoolId}/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/SchoolAuditLog" },
+      "description": "Immutable append-only audit log entries."
     }
   }
 }

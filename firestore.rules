@@ -17,7 +17,9 @@ service cloud.firestore {
     }
 
     function isOwner(userId) {
-      // All authenticated users may access only their own UID namespace, including\n      // anonymous tutor guests. Staff privileges are never inferred from this rule.\n      return isSignedIn() && request.auth.uid == userId;
+      // All authenticated users may access only their own UID namespace, including
+      // anonymous tutor guests. Staff privileges are never inferred from this rule.
+      return isSignedIn() && request.auth.uid == userId;
     }
 
     function isValidId(id) {
@@ -582,6 +584,572 @@ service cloud.firestore {
             incoming().diff(existing()).affectedKeys().hasOnly(['subject', 'examType', 'examLabel', 'score', 'maxScore', 'percentage', 'chapterOrTopic', 'bookId', 'examDate', 'notes', 'updatedAt'])
           );
         allow delete: if isOwner(userId) && isValidId(gradeId);
+      }
+    }
+
+    // === Smart Student Record (سجل الطالب الذكي) ===
+    function isSchoolOwnerDoc(schoolId) {
+      return isVerifiedUser()
+        && isValidId(schoolId)
+        && exists(/databases/$(database)/documents/schools/$(schoolId))
+        && get(/databases/$(database)/documents/schools/$(schoolId)).data.ownerUid == request.auth.uid;
+    }
+
+    function hasSchoolMemberDoc(schoolId) {
+      return isVerifiedUser()
+        && isValidId(schoolId)
+        && exists(/databases/$(database)/documents/schools/$(schoolId)/members/$(request.auth.uid));
+    }
+
+    function getSchoolMember(schoolId) {
+      return get(/databases/$(database)/documents/schools/$(schoolId)/members/$(request.auth.uid)).data;
+    }
+
+    function isSchoolAdminMember(schoolId) {
+      return isSchoolOwnerDoc(schoolId)
+        || (hasSchoolMemberDoc(schoolId)
+          && getSchoolMember(schoolId).status == 'active'
+          && getSchoolMember(schoolId).role == 'admin');
+    }
+
+    function isSectionCounselorMember(schoolId, sectionId) {
+      return hasSchoolMemberDoc(schoolId)
+        && getSchoolMember(schoolId).status == 'active'
+        && getSchoolMember(schoolId).role == 'counselor'
+        && getSchoolMember(schoolId).sectionId == sectionId;
+    }
+
+    function isSelfStudentMember(schoolId, studentId) {
+      return hasSchoolMemberDoc(schoolId)
+        && getSchoolMember(schoolId).status == 'active'
+        && getSchoolMember(schoolId).role == 'student'
+        && getSchoolMember(schoolId).studentId == studentId;
+    }
+
+    function isValidSchoolRecord(data, schoolId) {
+      return data.id is string
+        && data.id == schoolId
+        && isValidId(data.id)
+        && data.ownerUid is string
+        && isValidId(data.ownerUid)
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 200
+        && data.academicYear is string
+        && data.academicYear.size() >= 1
+        && data.academicYear.size() <= 40
+        && data.directorate is string
+        && data.directorate.size() >= 1
+        && data.directorate.size() <= 160
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && isOptionalString(data, 'logoDataUrl', 350000)
+        && isOptionalString(data, 'coverDataUrl', 450000)
+        && isOptionalString(data, 'overview', 4000)
+        && isOptionalString(data, 'vision', 2000)
+        && isOptionalString(data, 'mission', 2000)
+        && (!('goals' in data) || (data.goals is list && data.goals.size() <= 30 && (data.goals.size() == 0 || data.goals[0] is string)));
+    }
+
+    function isValidSchoolMember(data, schoolId, memberUid) {
+      return data.uid is string
+        && data.uid == memberUid
+        && isValidId(data.uid)
+        && data.schoolId is string
+        && data.schoolId == schoolId
+        && isValidId(data.schoolId)
+        && data.ownerUid is string
+        && isValidId(data.ownerUid)
+        && data.role in ['admin', 'counselor', 'student']
+        && data.status in ['active', 'revoked']
+        && data.updatedAt is timestamp
+        && isOptionalString(data, 'sectionId', 128)
+        && isOptionalString(data, 'studentId', 128)
+        && isOptionalString(data, 'displayName', 160);
+    }
+
+    function isValidSchoolAnnouncement(data, schoolId, announcementId) {
+      return data.id is string
+        && data.id == announcementId
+        && isValidId(data.id)
+        && data.schoolId is string
+        && data.schoolId == schoolId
+        && isValidId(data.schoolId)
+        && data.ownerUid is string
+        && isValidId(data.ownerUid)
+        && data.title is string
+        && data.title.size() >= 1
+        && data.title.size() <= 200
+        && data.body is string
+        && data.body.size() >= 1
+        && data.body.size() <= 4000
+        && data.pinned is bool
+        && data.visibility in ['public', 'internal']
+        && data.authorName is string
+        && data.authorName.size() >= 1
+        && data.authorName.size() <= 160
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSchoolStage(data, schoolId, stageId) {
+      return data.id is string
+        && data.id == stageId
+        && isValidId(data.id)
+        && data.schoolId is string
+        && data.schoolId == schoolId
+        && isValidId(data.schoolId)
+        && data.ownerUid is string
+        && isValidId(data.ownerUid)
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 160
+        && data.orderIndex is int
+        && data.orderIndex >= 0
+        && data.orderIndex <= 200
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSchoolSection(data, schoolId, sectionId) {
+      return data.id is string
+        && data.id == sectionId
+        && isValidId(data.id)
+        && data.schoolId is string
+        && data.schoolId == schoolId
+        && isValidId(data.schoolId)
+        && data.ownerUid is string
+        && isValidId(data.ownerUid)
+        && data.stageId is string
+        && isValidId(data.stageId)
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 160
+        && data.counselorName is string
+        && data.counselorName.size() <= 160
+        && data.counselorCodeStatus in ['active', 'revoked', 'unset']
+        && data.orderIndex is int
+        && data.orderIndex >= 0
+        && data.orderIndex <= 500
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSchoolStudent(data, schoolId, studentId) {
+      return data.id is string
+        && data.id == studentId
+        && isValidId(data.id)
+        && data.schoolId is string
+        && data.schoolId == schoolId
+        && isValidId(data.schoolId)
+        && data.ownerUid is string
+        && isValidId(data.ownerUid)
+        && data.sectionId is string
+        && isValidId(data.sectionId)
+        && data.fullName is string
+        && data.fullName.size() >= 1
+        && data.fullName.size() <= 160
+        && data.status in ['active', 'inactive', 'transferred']
+        && data.studentCodeStatus in ['active', 'revoked', 'unset']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && isOptionalString(data, 'notes', 1000);
+    }
+
+    function isValidSchoolAbsence(data, schoolId, absenceId) {
+      return data.id is string
+        && data.id == absenceId
+        && isValidId(data.id)
+        && data.schoolId is string
+        && data.schoolId == schoolId
+        && isValidId(data.schoolId)
+        && data.ownerUid is string
+        && isValidId(data.ownerUid)
+        && data.sectionId is string
+        && isValidId(data.sectionId)
+        && data.studentId is string
+        && isValidId(data.studentId)
+        && data.date is string
+        && data.date.size() >= 8
+        && data.date.size() <= 20
+        && data.excuseType in ['excused', 'unexcused', 'medical', 'official']
+        && data.recordedBy is string
+        && data.recordedBy.size() >= 1
+        && data.recordedBy.size() <= 160
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && isOptionalString(data, 'subjectName', 120)
+        && isOptionalString(data, 'notes', 1000);
+    }
+
+    function isValidSchoolSubject(data, schoolId, subjectId) {
+      return data.id is string
+        && data.id == subjectId
+        && isValidId(data.id)
+        && data.schoolId is string
+        && data.schoolId == schoolId
+        && isValidId(data.schoolId)
+        && data.ownerUid is string
+        && isValidId(data.ownerUid)
+        && data.sectionId is string
+        && isValidId(data.sectionId)
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 160
+        && data.payloadJson is string
+        && data.payloadJson.size() >= 2
+        && data.payloadJson.size() <= 350000
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSchoolTemplate(data, schoolId, templateId) {
+      return data.id is string
+        && data.id == templateId
+        && isValidId(data.id)
+        && data.schoolId is string
+        && data.schoolId == schoolId
+        && isValidId(data.schoolId)
+        && data.ownerUid is string
+        && isValidId(data.ownerUid)
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 160
+        && data.boxesJson is string
+        && data.boxesJson.size() >= 2
+        && data.boxesJson.size() <= 60000
+        && data.createdAt is timestamp
+        && isOptionalString(data, 'description', 1000);
+    }
+
+    function isValidSchoolAuditLog(data, schoolId, logId) {
+      return data.id is string
+        && data.id == logId
+        && isValidId(data.id)
+        && data.schoolId is string
+        && data.schoolId == schoolId
+        && isValidId(data.schoolId)
+        && data.ownerUid is string
+        && isValidId(data.ownerUid)
+        && data.actorName is string
+        && data.actorName.size() >= 1
+        && data.actorName.size() <= 160
+        && data.actorRole in ['admin', 'counselor', 'student', 'system']
+        && data.action is string
+        && data.action.size() >= 1
+        && data.action.size() <= 160
+        && data.targetType is string
+        && data.targetType.size() >= 1
+        && data.targetType.size() <= 80
+        && data.targetId is string
+        && data.targetId.size() <= 128
+        && data.targetLabel is string
+        && data.targetLabel.size() <= 200
+        && data.prevValue is string
+        && data.prevValue.size() <= 4000
+        && data.nextValue is string
+        && data.nextValue.size() <= 4000
+        && data.timestamp is timestamp;
+    }
+
+    match /schools/{schoolId} {
+      allow get: if isValidId(schoolId)
+        && isVerifiedUser()
+        && (existing().ownerUid == request.auth.uid || isSchoolAdminMember(schoolId));
+      allow list: if isVerifiedUser() && resource.data.ownerUid == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(schoolId)
+        && incoming().ownerUid == request.auth.uid
+        && incoming().keys().hasAll(['id', 'ownerUid', 'name', 'academicYear', 'directorate', 'createdAt', 'updatedAt'])
+        && incoming().keys().hasOnly(['id', 'ownerUid', 'name', 'academicYear', 'directorate', 'logoDataUrl', 'coverDataUrl', 'overview', 'vision', 'mission', 'goals', 'createdAt', 'updatedAt'])
+        && isValidSchoolRecord(incoming(), schoolId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(schoolId)
+        && existing().ownerUid == request.auth.uid
+        && isValidSchoolRecord(incoming(), schoolId)
+        && incoming().id == existing().id
+        && incoming().ownerUid == existing().ownerUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'academicYear', 'directorate', 'logoDataUrl', 'coverDataUrl', 'overview', 'vision', 'mission', 'goals', 'updatedAt'])
+        );
+      allow delete: if isVerifiedUser() && isValidId(schoolId) && existing().ownerUid == request.auth.uid;
+
+      match /members/{memberUid} {
+        allow get: if isValidId(schoolId)
+          && isValidId(memberUid)
+          && isVerifiedUser()
+          && (request.auth.uid == memberUid || isSchoolAdminMember(schoolId));
+        allow list: if isVerifiedUser() && resource.data.ownerUid == request.auth.uid;
+        allow create: if isSchoolOwnerDoc(schoolId)
+          && isValidId(memberUid)
+          && incoming().ownerUid == request.auth.uid
+          && incoming().keys().hasAll(['uid', 'schoolId', 'ownerUid', 'role', 'status', 'updatedAt'])
+          && incoming().keys().hasOnly(['uid', 'schoolId', 'ownerUid', 'role', 'sectionId', 'studentId', 'displayName', 'status', 'updatedAt'])
+          && isValidSchoolMember(incoming(), schoolId, memberUid)
+          && incoming().updatedAt == request.time;
+        allow update: if isSchoolOwnerDoc(schoolId)
+          && isValidId(memberUid)
+          && isValidSchoolMember(incoming(), schoolId, memberUid)
+          && incoming().uid == existing().uid
+          && incoming().schoolId == existing().schoolId
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().updatedAt == request.time
+          && (
+            incoming().diff(existing()).affectedKeys().hasOnly(['role', 'sectionId', 'studentId', 'displayName', 'status', 'updatedAt'])
+          );
+        allow delete: if isSchoolOwnerDoc(schoolId) && isValidId(memberUid);
+      }
+
+      match /announcements/{announcementId} {
+        allow get: if isValidId(schoolId)
+          && isValidId(announcementId)
+          && isVerifiedUser()
+          && (isSchoolAdminMember(schoolId) || hasSchoolMemberDoc(schoolId));
+        allow list: if isVerifiedUser() && resource.data.ownerUid == request.auth.uid;
+        allow create: if isSchoolAdminMember(schoolId)
+          && isValidId(announcementId)
+          && incoming().ownerUid == request.auth.uid
+          && incoming().keys().hasAll(['id', 'schoolId', 'ownerUid', 'title', 'body', 'pinned', 'visibility', 'authorName', 'createdAt', 'updatedAt'])
+          && incoming().keys().hasOnly(['id', 'schoolId', 'ownerUid', 'title', 'body', 'pinned', 'visibility', 'authorName', 'createdAt', 'updatedAt'])
+          && isValidSchoolAnnouncement(incoming(), schoolId, announcementId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isSchoolAdminMember(schoolId)
+          && isValidId(announcementId)
+          && isValidSchoolAnnouncement(incoming(), schoolId, announcementId)
+          && incoming().id == existing().id
+          && incoming().schoolId == existing().schoolId
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'body', 'pinned', 'visibility', 'authorName', 'updatedAt'])
+          );
+        allow delete: if isSchoolAdminMember(schoolId) && isValidId(announcementId);
+      }
+
+      match /stages/{stageId} {
+        allow get: if isValidId(schoolId)
+          && isValidId(stageId)
+          && isVerifiedUser()
+          && (isSchoolAdminMember(schoolId) || hasSchoolMemberDoc(schoolId));
+        allow list: if isVerifiedUser() && resource.data.ownerUid == request.auth.uid;
+        allow create: if isSchoolAdminMember(schoolId)
+          && isValidId(stageId)
+          && incoming().ownerUid == request.auth.uid
+          && incoming().keys().hasAll(['id', 'schoolId', 'ownerUid', 'name', 'orderIndex', 'updatedAt'])
+          && incoming().keys().hasOnly(['id', 'schoolId', 'ownerUid', 'name', 'orderIndex', 'updatedAt'])
+          && isValidSchoolStage(incoming(), schoolId, stageId)
+          && incoming().updatedAt == request.time;
+        allow update: if isSchoolAdminMember(schoolId)
+          && isValidId(stageId)
+          && isValidSchoolStage(incoming(), schoolId, stageId)
+          && incoming().id == existing().id
+          && incoming().schoolId == existing().schoolId
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().updatedAt == request.time
+          && (
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'orderIndex', 'updatedAt'])
+          );
+        allow delete: if isSchoolAdminMember(schoolId) && isValidId(stageId);
+      }
+
+      match /sections/{sectionId} {
+        allow get: if isValidId(schoolId)
+          && isValidId(sectionId)
+          && isVerifiedUser()
+          && (isSchoolAdminMember(schoolId) || isSectionCounselorMember(schoolId, sectionId));
+        allow list: if isVerifiedUser() && resource.data.ownerUid == request.auth.uid;
+        allow create: if isSchoolAdminMember(schoolId)
+          && isValidId(sectionId)
+          && incoming().ownerUid == request.auth.uid
+          && incoming().keys().hasAll(['id', 'schoolId', 'ownerUid', 'stageId', 'name', 'counselorName', 'counselorCodeStatus', 'orderIndex', 'updatedAt'])
+          && incoming().keys().hasOnly(['id', 'schoolId', 'ownerUid', 'stageId', 'name', 'counselorName', 'counselorCodeStatus', 'orderIndex', 'updatedAt'])
+          && isValidSchoolSection(incoming(), schoolId, sectionId)
+          && incoming().updatedAt == request.time;
+        allow update: if isSchoolAdminMember(schoolId)
+          && isValidId(sectionId)
+          && isValidSchoolSection(incoming(), schoolId, sectionId)
+          && incoming().id == existing().id
+          && incoming().schoolId == existing().schoolId
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().updatedAt == request.time
+          && (
+            incoming().diff(existing()).affectedKeys().hasOnly(['stageId', 'name', 'counselorName', 'counselorCodeStatus', 'orderIndex', 'updatedAt'])
+          );
+        allow delete: if isSchoolAdminMember(schoolId) && isValidId(sectionId);
+      }
+
+      match /students/{studentId} {
+        allow get: if isValidId(schoolId)
+          && isValidId(studentId)
+          && isVerifiedUser()
+          && (
+            isSchoolAdminMember(schoolId)
+            || isSectionCounselorMember(schoolId, existing().sectionId)
+            || isSelfStudentMember(schoolId, studentId)
+          );
+        allow list: if isVerifiedUser() && resource.data.ownerUid == request.auth.uid;
+        allow create: if isValidId(studentId)
+          && isVerifiedUser()
+          && (
+            isSchoolAdminMember(schoolId)
+            || isSectionCounselorMember(schoolId, incoming().sectionId)
+          )
+          && incoming().keys().hasAll(['id', 'schoolId', 'ownerUid', 'sectionId', 'fullName', 'status', 'studentCodeStatus', 'createdAt', 'updatedAt'])
+          && incoming().keys().hasOnly(['id', 'schoolId', 'ownerUid', 'sectionId', 'fullName', 'status', 'studentCodeStatus', 'notes', 'createdAt', 'updatedAt'])
+          && isValidSchoolStudent(incoming(), schoolId, studentId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(studentId)
+          && isVerifiedUser()
+          && (
+            isSchoolAdminMember(schoolId)
+            || isSectionCounselorMember(schoolId, existing().sectionId)
+          )
+          && isValidSchoolStudent(incoming(), schoolId, studentId)
+          && incoming().id == existing().id
+          && incoming().schoolId == existing().schoolId
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().sectionId == existing().sectionId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'status', 'studentCodeStatus', 'notes', 'updatedAt'])
+          );
+        allow delete: if isValidId(studentId)
+          && isVerifiedUser()
+          && (
+            isSchoolAdminMember(schoolId)
+            || isSectionCounselorMember(schoolId, existing().sectionId)
+          );
+      }
+
+      match /absences/{absenceId} {
+        allow get: if isValidId(schoolId)
+          && isValidId(absenceId)
+          && isVerifiedUser()
+          && (
+            isSchoolAdminMember(schoolId)
+            || isSectionCounselorMember(schoolId, existing().sectionId)
+            || isSelfStudentMember(schoolId, existing().studentId)
+          );
+        allow list: if isVerifiedUser() && resource.data.ownerUid == request.auth.uid;
+        allow create: if isValidId(absenceId)
+          && isVerifiedUser()
+          && (
+            isSchoolAdminMember(schoolId)
+            || isSectionCounselorMember(schoolId, incoming().sectionId)
+          )
+          && incoming().keys().hasAll(['id', 'schoolId', 'ownerUid', 'sectionId', 'studentId', 'date', 'excuseType', 'recordedBy', 'createdAt', 'updatedAt'])
+          && incoming().keys().hasOnly(['id', 'schoolId', 'ownerUid', 'sectionId', 'studentId', 'date', 'excuseType', 'subjectName', 'notes', 'recordedBy', 'createdAt', 'updatedAt'])
+          && isValidSchoolAbsence(incoming(), schoolId, absenceId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(absenceId)
+          && isVerifiedUser()
+          && (
+            isSchoolAdminMember(schoolId)
+            || isSectionCounselorMember(schoolId, existing().sectionId)
+          )
+          && isValidSchoolAbsence(incoming(), schoolId, absenceId)
+          && incoming().id == existing().id
+          && incoming().schoolId == existing().schoolId
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().sectionId == existing().sectionId
+          && incoming().studentId == existing().studentId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            incoming().diff(existing()).affectedKeys().hasOnly(['date', 'excuseType', 'subjectName', 'notes', 'recordedBy', 'updatedAt'])
+          );
+        allow delete: if isValidId(absenceId)
+          && isVerifiedUser()
+          && (
+            isSchoolAdminMember(schoolId)
+            || isSectionCounselorMember(schoolId, existing().sectionId)
+          );
+      }
+
+      match /subjects/{subjectId} {
+        allow get: if isValidId(schoolId)
+          && isValidId(subjectId)
+          && isVerifiedUser()
+          && (
+            isSchoolAdminMember(schoolId)
+            || isSectionCounselorMember(schoolId, existing().sectionId)
+          );
+        allow list: if isVerifiedUser() && resource.data.ownerUid == request.auth.uid;
+        allow create: if isValidId(subjectId)
+          && isVerifiedUser()
+          && (
+            isSchoolAdminMember(schoolId)
+            || isSectionCounselorMember(schoolId, incoming().sectionId)
+          )
+          && incoming().keys().hasAll(['id', 'schoolId', 'ownerUid', 'sectionId', 'name', 'payloadJson', 'updatedAt'])
+          && incoming().keys().hasOnly(['id', 'schoolId', 'ownerUid', 'sectionId', 'name', 'payloadJson', 'updatedAt'])
+          && isValidSchoolSubject(incoming(), schoolId, subjectId)
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(subjectId)
+          && isVerifiedUser()
+          && (
+            isSchoolAdminMember(schoolId)
+            || isSectionCounselorMember(schoolId, existing().sectionId)
+          )
+          && isValidSchoolSubject(incoming(), schoolId, subjectId)
+          && incoming().id == existing().id
+          && incoming().schoolId == existing().schoolId
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().sectionId == existing().sectionId
+          && incoming().updatedAt == request.time
+          && (
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'payloadJson', 'updatedAt'])
+          );
+        allow delete: if isValidId(subjectId)
+          && isVerifiedUser()
+          && (
+            isSchoolAdminMember(schoolId)
+            || isSectionCounselorMember(schoolId, existing().sectionId)
+          );
+      }
+
+      match /templates/{templateId} {
+        allow get: if isValidId(schoolId)
+          && isValidId(templateId)
+          && isVerifiedUser()
+          && (isSchoolAdminMember(schoolId) || hasSchoolMemberDoc(schoolId));
+        allow list: if isVerifiedUser() && resource.data.ownerUid == request.auth.uid;
+        allow create: if isValidId(templateId)
+          && isVerifiedUser()
+          && (
+            isSchoolAdminMember(schoolId)
+            || (hasSchoolMemberDoc(schoolId) && getSchoolMember(schoolId).status == 'active' && getSchoolMember(schoolId).role == 'counselor')
+          )
+          && incoming().keys().hasAll(['id', 'schoolId', 'ownerUid', 'name', 'boxesJson', 'createdAt'])
+          && incoming().keys().hasOnly(['id', 'schoolId', 'ownerUid', 'name', 'description', 'boxesJson', 'createdAt'])
+          && isValidSchoolTemplate(incoming(), schoolId, templateId)
+          && incoming().createdAt == request.time;
+        allow update: if false;
+        allow delete: if isValidId(templateId)
+          && isVerifiedUser()
+          && isSchoolAdminMember(schoolId);
+      }
+
+      match /auditLogs/{logId} {
+        allow get: if isValidId(schoolId) && isValidId(logId) && isSchoolAdminMember(schoolId);
+        allow list: if isVerifiedUser() && resource.data.ownerUid == request.auth.uid;
+        allow create: if isValidId(logId)
+          && isVerifiedUser()
+          && (
+            isSchoolAdminMember(schoolId)
+            || (hasSchoolMemberDoc(schoolId) && getSchoolMember(schoolId).status == 'active' && getSchoolMember(schoolId).role == 'counselor')
+          )
+          && incoming().keys().hasAll(['id', 'schoolId', 'ownerUid', 'actorName', 'actorRole', 'action', 'targetType', 'targetId', 'targetLabel', 'prevValue', 'nextValue', 'timestamp'])
+          && incoming().keys().hasOnly(['id', 'schoolId', 'ownerUid', 'actorName', 'actorRole', 'action', 'targetType', 'targetId', 'targetLabel', 'prevValue', 'nextValue', 'timestamp'])
+          && isValidSchoolAuditLog(incoming(), schoolId, logId)
+          && incoming().timestamp == request.time;
+        allow update, delete: if false;
       }
     }
   }

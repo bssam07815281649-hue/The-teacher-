@@ -15,26 +15,28 @@ import {
   PhoneOff,
   Mic,
   MicOff,
+  School,
 } from 'lucide-react';
+import { auth, makeSafeId, signOutUser } from './services/firebase';
 import {
-  auth,
+  GUEST_UID,
+  completeExamRecord,
   createBookRecord,
   createExamWithQuestions,
   createNote,
   createSchoolGrade,
   createStudyPlanWithTasks,
-  deleteAllUserDataAndAccount,
+  deleteAllTutorData,
   deleteBookCascade,
   deleteNoteRecord,
   deleteSchoolGrade,
   deleteStudyPlanCascade,
   getBookPage,
   getExamQuestions,
-  getOrCreateUserProfile,
-  makeSafeId,
+  loadOrCreateProfile,
   saveBookChatMessage,
   saveBookPage,
-  signOutUser,
+  saveUserProfile,
   subscribeBookChat,
   subscribeBooks,
   subscribeExams,
@@ -50,9 +52,13 @@ import {
   updateNoteContent,
   updateSchoolGrade,
   updateStudyTaskStatus,
-  updateUserProfile,
-  completeExamRecord,
-} from './services/firebase';
+} from './services/tutorStore';
+import {
+  clearSchoolSessionToken,
+  fetchSchoolWorkspace,
+  logoutSchoolSession,
+  setSchoolUnauthorizedHandler,
+} from './services/schoolRecordClient';
 import {
   cacheBookPage,
   deleteBookFromLocalCache,
@@ -91,12 +97,15 @@ import type {
   PageAudioState,
   QuestionType,
   SchoolGrade,
+  SchoolWorkspacePayload,
   StudyPlan,
   StudyTask,
   UserProfile,
 } from './types';
 import { AuthView } from './components/AuthView';
 import { AdminGate } from './components/AdminGate';
+import { CounselorWorkspace } from './components/school-record/CounselorWorkspace';
+import { StudentRecordPortal } from './components/school-record/StudentRecordPortal';
 import { LibrarySection } from './components/LibrarySection';
 import { LearnSection } from './components/LearnSection';
 import { StudyPlanSection } from './components/StudyPlanSection';
@@ -131,14 +140,21 @@ function extractReferencedPageNumbers(prompt: string, totalPages: number): numbe
 export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [guestMode, setGuestMode] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileError, setProfileError] = useState('');
 
   const [portalOpen, setPortalOpen] = useState(true);
   const [schoolRole, setSchoolRole] = useState<'admin' | 'counselor' | 'student' | null>(null);
+  const [pendingAdminCode, setPendingAdminCode] = useState('');
+  const [schoolWorkspace, setSchoolWorkspace] = useState<SchoolWorkspacePayload | null>(null);
+  const [schoolWorkspaceLoading, setSchoolWorkspaceLoading] = useState(false);
+  const [schoolWorkspaceError, setSchoolWorkspaceError] = useState('');
   const [activeSection, setActiveSection] = useState<AppSection>('library');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
+
+  const activeUid = firebaseUser?.uid || (guestMode ? GUEST_UID : null);
 
   // Core Firestore data
   const [books, setBooks] = useState<Book[]>([]);
@@ -219,8 +235,9 @@ export default function App() {
       setFirebaseUser(user);
       setProfileError('');
       if (user) {
+        setGuestMode(false);
         try {
-          const prof = await getOrCreateUserProfile(user);
+          const prof = await loadOrCreateProfile(user);
           setProfile(prof);
         } catch (err) {
           console.error(err);
@@ -242,12 +259,58 @@ export default function App() {
     return () => unsub();
   }, []);
 
+  // Load local guest profile automatically when open Guest Mode is active without Firebase user
+  useEffect(() => {
+    if (!firebaseUser && guestMode) {
+      void loadOrCreateProfile(null).then(setProfile);
+    }
+  }, [firebaseUser, guestMode]);
+
+  const loadSchoolWorkspace = useCallback(async () => {
+    setSchoolWorkspaceLoading(true);
+    setSchoolWorkspaceError('');
+    try {
+      const ws = await fetchSchoolWorkspace();
+      setSchoolWorkspace(ws);
+    } catch (err) {
+      setSchoolWorkspaceError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'تعذر تحميل بيانات المدرسة. تأكد من صلاحية الكود وحاول مجدداً.'
+      );
+    } finally {
+      setSchoolWorkspaceLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (schoolRole === 'counselor' || schoolRole === 'student') {
+      setSchoolUnauthorizedHandler(() => {
+        setSchoolWorkspace(null);
+        setSchoolRole(null);
+        setPortalOpen(true);
+      });
+      void loadSchoolWorkspace();
+      return () => setSchoolUnauthorizedHandler(null);
+    }
+    setSchoolWorkspace(null);
+    setSchoolWorkspaceError('');
+  }, [schoolRole, loadSchoolWorkspace]);
+
+  const handleSchoolLogout = useCallback(async () => {
+    await logoutSchoolSession();
+    clearSchoolSessionToken();
+    setSchoolWorkspace(null);
+    setSchoolRole(null);
+    setPortalOpen(true);
+  }, []);
+
   const retryProfileLoad = useCallback(async () => {
     const user = auth.currentUser;
     if (!user) return;
     setProfileError('');
     try {
-      const loaded = await getOrCreateUserProfile(user);
+      const loaded = await loadOrCreateProfile(user);
       setProfile(loaded);
     } catch (err) {
       console.error(err);
@@ -265,20 +328,19 @@ export default function App() {
     }
   }, [profile?.theme]);
 
-  // Subscribe to student's private collections
+  // Subscribe to student's private collections (Firebase or Local Guest Mode)
   useEffect(() => {
-    if (!firebaseUser) return;
-    const uid = firebaseUser.uid;
-    const uBooks = subscribeBooks(uid, (list) => {
+    if (!activeUid) return;
+    const uBooks = subscribeBooks(activeUid, (list) => {
       setBooks(list);
     });
-    const uNotes = subscribeNotes(uid, setNotes);
-    const uPlans = subscribeStudyPlans(uid, (list) => {
+    const uNotes = subscribeNotes(activeUid, setNotes);
+    const uPlans = subscribeStudyPlans(activeUid, (list) => {
       setPlans(list);
       setActivePlanId((prev) => prev || list[0]?.id || null);
     });
-    const uExams = subscribeExams(uid, setExams);
-    const uGrades = subscribeSchoolGrades(uid, setSchoolGrades);
+    const uExams = subscribeExams(activeUid, setExams);
+    const uGrades = subscribeSchoolGrades(activeUid, setSchoolGrades);
     return () => {
       uBooks();
       uNotes();
@@ -286,17 +348,17 @@ export default function App() {
       uExams();
       uGrades();
     };
-  }, [firebaseUser]);
+  }, [activeUid]);
 
   // Subscribe to active study plan tasks
   useEffect(() => {
-    if (!firebaseUser || !activePlanId) {
+    if (!activeUid || !activePlanId) {
       setStudyTasks([]);
       return;
     }
-    const unsub = subscribeStudyTasks(firebaseUser.uid, activePlanId, setStudyTasks);
+    const unsub = subscribeStudyTasks(activeUid, activePlanId, setStudyTasks);
     return () => unsub();
-  }, [firebaseUser, activePlanId]);
+  }, [activeUid, activePlanId]);
 
   const activeBook = useMemo(
     () => books.find((b) => b.id === activeBookId) || null,
@@ -362,19 +424,19 @@ export default function App() {
 
   // Subscribe to book chat
   useEffect(() => {
-    if (!firebaseUser || !activeBookId) {
+    if (!activeUid || !activeBookId) {
       setChatMessages([]);
       return;
     }
-    const unsub = subscribeBookChat(firebaseUser.uid, activeBookId, setChatMessages);
+    const unsub = subscribeBookChat(activeUid, activeBookId, setChatMessages);
     return () => unsub();
-  }, [firebaseUser, activeBookId]);
+  }, [activeUid, activeBookId]);
 
   // Fast page load on demand (does NOT overwrite saved progress checkpoint; student uses explicit checkpoint button)
   const loadSpecificPage = useCallback(
     async (book: Book, pageNum: number): Promise<BookPage | null> => {
-      if (!firebaseUser) return null;
-      const uid = firebaseUser.uid;
+      if (!activeUid) return null;
+      const uid = activeUid;
       const clamped = Math.max(1, Math.min(book.totalPages, pageNum));
       setCurrentPageNumber(clamped);
       setLoadingPage(true);
@@ -415,14 +477,14 @@ export default function App() {
         setLoadingPage(false);
       }
     },
-    [firebaseUser]
+    [activeUid]
   );
 
   const handleSaveProgressCheckpoint = useCallback(async () => {
-    if (!firebaseUser || !activeBook) return;
-    await updateBookProgress(firebaseUser.uid, activeBook.id, currentPageNumber);
+    if (!activeUid || !activeBook) return;
+    await updateBookProgress(activeUid, activeBook.id, currentPageNumber);
     showToast(`تم تثبيت مواصلة التقدم عند صفحة ${currentPageNumber}`);
-  }, [firebaseUser, activeBook, currentPageNumber, showToast]);
+  }, [activeUid, activeBook, currentPageNumber, showToast]);
 
   // Global Page Audio Helpers (Web Audio API + Gemini 3.8 TTS)
   const stopTtsRaf = useCallback(() => {
@@ -854,8 +916,8 @@ ${shouldSpeakNewPage ? 'وضع الانتقال التلقائي مفعل على
   }, []);
 
   const handleUploadFiles = async (files: File[]) => {
-    if (!firebaseUser) return;
-    const uid = firebaseUser.uid;
+    if (!activeUid) return;
+    const uid = activeUid;
     const bookId = makeSafeId('bk');
 
     setUploadProgress({ active: true, percent: 5, message: 'جاري فحص الملف...' });
@@ -926,7 +988,7 @@ ${shouldSpeakNewPage ? 'وضع الانتقال التلقائي مفعل على
   // REAL Tool Executor for Gemini Live & Text Chat Function Calling
   const executeToolCall = useCallback(
     async (name: string, args: Record<string, unknown>): Promise<Record<string, unknown>> => {
-      const uid = firebaseUser?.uid;
+      const uid = activeUid;
       if (!uid) return { ok: false, error: 'غير مسجل الدخول' };
       const st = stateRef.current;
 
@@ -1209,12 +1271,12 @@ ${shouldSpeakNewPage ? 'وضع الانتقال التلقائي مفعل على
           return { ok: true };
       }
     },
-    [firebaseUser, handleOpenBook, loadSpecificPage, showToast]
+    [activeUid, handleOpenBook, loadSpecificPage, showToast]
   );
 
   const flushLiveDraftsToChat = useCallback(
     (flushInput: boolean, flushOutput: boolean) => {
-      const uid = firebaseUser?.uid;
+      const uid = activeUid;
       const targetBookId = liveChatBookIdRef.current || stateRef.current.activeBook?.id;
       const pageNum = stateRef.current.currentPageNumber || 1;
       const chapterTitle = stateRef.current.currentPageData?.chapterTitle || '';
@@ -1247,7 +1309,7 @@ ${shouldSpeakNewPage ? 'وضع الانتقال التلقائي مفعل على
         }
       }
     },
-    [firebaseUser?.uid]
+    [activeUid]
   );
 
   // Live Voice Call Management (Single active session, voice transcripts merged into Book Chat)
@@ -1356,8 +1418,8 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
     text: string,
     options?: { selectedText?: string; selectedImage?: string }
   ) => {
-    if (!firebaseUser || !activeBook || !profile) return;
-    const uid = firebaseUser.uid;
+    if (!activeUid || !activeBook || !profile) return;
+    const uid = activeUid;
     setChatSending(true);
     try {
       await saveBookChatMessage(uid, activeBook.id, {
@@ -1436,7 +1498,7 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
     action: 'explain' | 'example' | 'explain_diagram',
     payload: { selectedText?: string; croppedImage?: string }
   ) => {
-    if (!firebaseUser || !activeBook || !profile) return;
+    if (!activeUid || !activeBook || !profile) return;
     setChatSending(true);
     try {
       const userLabel =
@@ -1446,7 +1508,7 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
           ? `أعطني مثالاً يوضح: "${payload.selectedText?.slice(0, 120)}"`
           : `اشرح لي: "${payload.selectedText?.slice(0, 120)}"`;
 
-      await saveBookChatMessage(firebaseUser.uid, activeBook.id, {
+      await saveBookChatMessage(activeUid, activeBook.id, {
         role: 'user',
         text: userLabel,
         pageNumber: currentPageNumber,
@@ -1466,7 +1528,7 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
         tutorLanguage: profile.tutorLanguage,
       });
 
-      await saveBookChatMessage(firebaseUser.uid, activeBook.id, {
+      await saveBookChatMessage(activeUid, activeBook.id, {
         role: 'assistant',
         text: res.explanation,
         pageNumber: currentPageNumber,
@@ -1489,7 +1551,7 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
     hardSubjects: string[];
     studyMode: 'new' | 'review' | 'both';
   }) => {
-    if (!firebaseUser) return;
+    if (!activeUid) return;
     const chosenBooks = books.filter((b) => input.bookIds.includes(b.id));
     const aiPlan = await generateStudyPlanAI({
       books: chosenBooks.map((b) => ({
@@ -1516,7 +1578,7 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
     });
 
     const newPlanId = await createStudyPlanWithTasks(
-      firebaseUser.uid,
+      activeUid,
       {
         title: aiPlan.title || 'خطتي الدراسية',
         startDate: input.startDate,
@@ -1567,8 +1629,8 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
     questionTypes: QuestionType[];
     focusWeakTopics?: string[];
   }) => {
-    if (!firebaseUser || !profile) throw new Error('غير مصرح');
-    const uid = firebaseUser.uid;
+    if (!activeUid || !profile) throw new Error('غير مصرح');
+    const uid = activeUid;
     const book = books.find((b) => b.id === config.bookId);
     if (!book) throw new Error('الكتاب غير موجود');
 
@@ -1669,50 +1731,118 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
   }
 
   if (schoolRole === 'admin') {
-    return <AdminGate onBack={() => { setSchoolRole(null); setPortalOpen(true); }} />;
-  }
-
-  if (portalOpen || !firebaseUser || !profile) {
-    return <AuthView ready={Boolean(firebaseUser && profile)} profileError={profileError} onRetryProfile={() => void retryProfileLoad()} onSchoolRole={(role) => {
-      setSchoolRole(role);
-      setPortalOpen(false);
-    }} onOpen={(section) => {
-      setSchoolRole(null);
-      setActiveSection(section);
-      setPortalOpen(false);
-    }} />;
-  }
-
-  // Staff access is based only on server-issued Firebase role claims; the
-  // school pages cannot be unlocked by a password checked in browser code.
-  if (schoolRole) {
     return (
-      <main dir="rtl" className="min-h-screen bg-[#FAF9F6] px-4 py-10 text-slate-900">
-        <div className="mx-auto max-w-xl space-y-5 rounded-2xl bg-white p-6 shadow-md">
-          <h1 className="text-2xl font-bold">{schoolRole === 'counselor' ? 'صفحة المرشد التربوي' : 'درجات الطالب'}</h1>
-          {schoolRole === 'student' ? (
-            <section className="space-y-3">
-              <p className="text-sm text-slate-600">عرض الدرجات المسجلة لحسابك فقط. هذه الصفحة للقراءة ولا تسمح بتعديل الدرجات.</p>
-              {schoolGrades.length === 0 ? <p>لا توجد درجات مسجلة لهذا الحساب حالياً.</p> : (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-sm">
-                    <thead><tr className="bg-slate-100"><th className="p-2 text-right">المادة</th><th className="p-2 text-right">الامتحان</th><th className="p-2 text-right">الدرجة</th></tr></thead>
-                    <tbody>{schoolGrades.map((grade) => (
-                      <tr key={grade.id} className="border-b">
-                        <td className="p-2">{grade.subject}</td><td className="p-2">{grade.examLabel}</td>
-                        <td className="p-2" dir="ltr">{grade.score} / {grade.maxScore}</td>
-                      </tr>
-                    ))}</tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-          ) : (
-            <p>تم التحقق من صفة الحساب عبر Firebase. أدوات الإرشاد والبيانات المشتركة تحتاج ربطها بنظام المدرسة وصلاحيات قاعدة البيانات قبل استخدامها.</p>
+      <AdminGate
+        initialAdminCode={pendingAdminCode}
+        onBack={() => {
+          setSchoolRole(null);
+          setPendingAdminCode('');
+          setPortalOpen(true);
+        }}
+      />
+    );
+  }
+
+  // Counselor & Student workspaces open strictly via school access codes — NO Google login required!
+  if (schoolRole === 'counselor' || schoolRole === 'student') {
+    return (
+      <div
+        dir="rtl"
+        className="min-h-screen bg-[#FAF9F6] dark:bg-slate-950 text-slate-900 dark:text-slate-100 py-5 px-3 sm:px-6"
+      >
+        <div className="max-w-6xl mx-auto space-y-4">
+          {schoolWorkspaceLoading && !schoolWorkspace && (
+            <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-[#653CF5]" />
+              <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                جاري تحميل {schoolRole === 'counselor' ? 'مساحة المرشد التربوي' : 'سجل درجات الطالب'}…
+              </p>
+            </div>
           )}
-          <button className="rounded-lg bg-blue-700 px-4 py-2 text-white" onClick={() => { setSchoolRole(null); setPortalOpen(true); }}>العودة للمعلم الذكي</button>
+
+          {schoolWorkspaceError && !schoolWorkspace && (
+            <div className="mx-auto max-w-lg rounded-2xl bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900 p-6 space-y-4 shadow-sm">
+              <p role="alert" className="text-sm font-semibold text-red-700 dark:text-red-300">
+                {schoolWorkspaceError}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void loadSchoolWorkspace()}
+                  className="min-h-[42px] px-4 rounded-xl bg-[#653CF5] text-white text-xs font-bold cursor-pointer"
+                >
+                  إعادة المحاولة
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSchoolLogout()}
+                  className="min-h-[42px] px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold cursor-pointer"
+                >
+                  العودة إلى بوابة المدرسة
+                </button>
+              </div>
+            </div>
+          )}
+
+          {schoolWorkspace && schoolRole === 'counselor' && schoolWorkspace.session.sectionId && (
+            <CounselorWorkspace
+              workspace={schoolWorkspace}
+              sectionId={schoolWorkspace.session.sectionId}
+              onWorkspaceRefresh={loadSchoolWorkspace}
+              onLogout={handleSchoolLogout}
+            />
+          )}
+
+          {schoolWorkspace && schoolRole === 'student' && (
+            <StudentRecordPortal
+              workspace={schoolWorkspace}
+              books={books}
+              onWorkspaceRefresh={loadSchoolWorkspace}
+              onBuildRemedialPlan={(weakSubs) => {
+                setSchoolRole(null);
+                if (!firebaseUser) setGuestMode(true);
+                setRemedialSubjectsTrigger(weakSubs);
+                setActiveSection('plan');
+                setPortalOpen(false);
+              }}
+              onPracticeWeakArea={(_subject, bookId) => {
+                setSchoolRole(null);
+                if (!firebaseUser) setGuestMode(true);
+                if (bookId) setExamPreselectedBookId(bookId);
+                setActiveSection('exam');
+                setPortalOpen(false);
+              }}
+              onLogout={handleSchoolLogout}
+            />
+          )}
         </div>
-      </main>
+      </div>
+    );
+  }
+
+  if (portalOpen || !activeUid || !profile) {
+    return (
+      <AuthView
+        ready={Boolean(activeUid && profile)}
+        profileError={profileError}
+        onRetryProfile={() => void retryProfileLoad()}
+        onSchoolRole={(role, adminCode) => {
+          setPendingAdminCode(role === 'admin' ? adminCode || '' : '');
+          setSchoolRole(role);
+          setPortalOpen(false);
+        }}
+        onOpen={(section) => {
+          setSchoolRole(null);
+          setActiveSection(section);
+          setPortalOpen(false);
+        }}
+        onEnterGuest={(section) => {
+          setSchoolRole(null);
+          setGuestMode(true);
+          setActiveSection(section);
+          setPortalOpen(false);
+        }}
+      />
     );
   }
 
@@ -1786,16 +1916,30 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
             })}
           </nav>
 
-          {/* Zone 3: Single Compact Settings Trigger */}
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="min-h-[40px] px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700"
-            aria-label="الإعدادات والحساب"
-          >
-            <Settings className="w-4 h-4" />
-            <span className="hidden sm:inline">الإعدادات</span>
-          </button>
+          {/* Zone 3: School Portal Switcher + Settings Trigger */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                window.location.hash = '#school';
+                setPortalOpen(true);
+              }}
+              className="min-h-[40px] px-3 rounded-xl border border-violet-200 dark:border-slate-700 bg-violet-50 dark:bg-slate-800 text-violet-700 dark:text-violet-300 text-xs sm:text-sm font-semibold flex items-center gap-1.5 whitespace-nowrap cursor-pointer hover:bg-violet-100 dark:hover:bg-slate-700"
+              aria-label="بوابة المدرسة والدخول بالكود"
+            >
+              <School className="w-4 h-4" />
+              <span className="hidden sm:inline">بوابة المدرسة</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="min-h-[40px] px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold flex items-center gap-2 whitespace-nowrap cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700"
+              aria-label="الإعدادات والحساب"
+            >
+              <Settings className="w-4 h-4" />
+              <span className="hidden sm:inline">الإعدادات</span>
+            </button>
+          </div>
         </div>
 
         {/* Persistent Top Header Audio Bar (stays visible across page flips & tabs until stopped/finished) */}
@@ -2045,13 +2189,13 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
             onUploadFiles={handleUploadFiles}
             onOpenBook={(book) => handleOpenBook(book)}
             onRenameBook={async (bookId, title) => {
-              await updateBookMetadata(firebaseUser.uid, bookId, { title });
+              await updateBookMetadata(activeUid, bookId, { title });
               showToast('تم تعديل اسم الكتاب.');
             }}
             onDeleteBook={async (bookId) => {
               if (activeBookId === bookId) setActiveBookId(null);
-              await deleteBookFromLocalCache(firebaseUser.uid, bookId);
-              await deleteBookCascade(firebaseUser.uid, bookId);
+              await deleteBookFromLocalCache(activeUid, bookId);
+              await deleteBookCascade(activeUid, bookId);
               showToast('تم حذف الكتاب.');
             }}
           />
@@ -2076,10 +2220,10 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
             onTogglePageCompleted={async () => {
               if (!activeBook || !currentPageData) return;
               const nextState = !currentPageData.isCompleted;
-              await togglePageCompleted(firebaseUser.uid, activeBook.id, currentPageNumber, nextState);
+              await togglePageCompleted(activeUid, activeBook.id, currentPageNumber, nextState);
               const updated = { ...currentPageData, isCompleted: nextState };
               setCurrentPageData(updated);
-              await cacheBookPage(firebaseUser.uid, activeBook.id, updated);
+              await cacheBookPage(activeUid, activeBook.id, updated);
             }}
             pageAudio={pageAudio}
             isPageAudioLocked={isPageAudioLocked}
@@ -2092,7 +2236,7 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
             onQuickSelectionAction={handleQuickSelectionAction}
             onSaveNote={async (noteInput) => {
               if (!activeBook) return;
-              await createNote(firebaseUser.uid, {
+              await createNote(activeUid, {
                 bookId: activeBook.id,
                 bookTitle: activeBook.title,
                 chapterTitle: currentPageData?.chapterTitle || '',
@@ -2107,7 +2251,7 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
             onOpenNotesDrawer={() => setNotesDrawerOpen(true)}
             onExtractImportantTasks={async (scope) => {
               if (!activeBook) return [];
-              const uid = firebaseUser.uid;
+              const uid = activeUid;
               const pages: { pageNumber: number; text?: string; imageData?: string }[] = [];
               if (scope === 'page' && currentPageData) {
                 pages.push({
@@ -2200,7 +2344,7 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
               const nextCompletedCount =
                 studyTasks.filter((t) => t.status === 'completed' || t.id === task.id).length;
               await updateStudyTaskStatus(
-                firebaseUser.uid,
+                activeUid,
                 activePlan.id,
                 task.id,
                 { status: 'completed', actualMinutes },
@@ -2241,7 +2385,7 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
                 weakSchoolSummary: schoolGradesSummary.summaryText,
               });
               for (const upd of res.updatedTasks || []) {
-                await updateStudyTaskStatus(firebaseUser.uid, activePlan.id, upd.id, {
+                await updateStudyTaskStatus(activeUid, activePlan.id, upd.id, {
                   date: upd.date,
                   estimatedMinutes: Math.max(10, upd.estimatedMinutes),
                 });
@@ -2249,7 +2393,7 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
               showToast(res.adviceMessage || 'تم تحديث الجدول وتكييفه حسب تقدمك.');
             }}
             onDeletePlan={async (planId) => {
-              await deleteStudyPlanCascade(firebaseUser.uid, planId);
+              await deleteStudyPlanCascade(activeUid, planId);
               setActivePlanId(null);
               showToast('تم حذف الخطة الدراسية.');
             }}
@@ -2276,12 +2420,12 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
               setExamPreselectedBookId(null);
             }}
             onCreateExam={handleCreateExam}
-            onLoadExamQuestions={(examId) => getExamQuestions(firebaseUser.uid, examId)}
+            onLoadExamQuestions={(examId) => getExamQuestions(activeUid, examId)}
             onSaveQuestionProgress={(examId, qId, updates) =>
-              updateExamQuestionResult(firebaseUser.uid, examId, qId, updates)
+              updateExamQuestionResult(activeUid, examId, qId, updates)
             }
             onSubmitWrittenExam={async (exam, qs) => {
-              const uid = firebaseUser.uid;
+              const uid = activeUid;
               const book = books.find((b) => b.id === exam.bookId);
               const refPages: { pageNumber: number; text: string }[] = [];
               for (const q of qs) {
@@ -2319,7 +2463,7 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
               return { ...exam, score: graded.score, weakTopics: graded.weakTopics, status: 'completed' };
             }}
             onFinalizeOralExam={async (exam, qs) => {
-              const uid = firebaseUser.uid;
+              const uid = activeUid;
               const needsAutoGrade = qs.some((q) => q.isCorrect === undefined && q.studentAnswer);
               if (needsAutoGrade) {
                 const graded = await gradeExamAI({
@@ -2374,15 +2518,15 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
               }
             }}
             onAddSchoolGrade={async (grade) => {
-              await createSchoolGrade(firebaseUser.uid, grade);
+              await createSchoolGrade(activeUid, grade);
               showToast('تمت إضافة الدرجة إلى سجل الصف!');
             }}
             onUpdateSchoolGrade={async (gradeId, updates) => {
-              await updateSchoolGrade(firebaseUser.uid, gradeId, updates);
+              await updateSchoolGrade(activeUid, gradeId, updates);
               showToast('تم تحديث الدرجة.');
             }}
             onDeleteSchoolGrade={async (gradeId) => {
-              await deleteSchoolGrade(firebaseUser.uid, gradeId);
+              await deleteSchoolGrade(activeUid, gradeId);
               showToast('تم حذف الدرجة.');
             }}
             onBuildRemedialPlan={(weakSubs) => {
@@ -2425,16 +2569,22 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
         profile={profile}
         onUpdateProfile={async (updates) => {
           setProfile((prev) => (prev ? { ...prev, ...updates } : prev));
-          await updateUserProfile(firebaseUser.uid, updates);
+          await saveUserProfile(activeUid, updates);
           showToast('تم حفظ الإعدادات.');
         }}
         onSignOut={async () => {
           setSettingsOpen(false);
-          await signOutUser();
+          if (firebaseUser) {
+            await signOutUser();
+          }
+          setGuestMode(false);
+          setPortalOpen(true);
         }}
         onDeleteAccount={async () => {
-          await deleteAllUserDataAndAccount(firebaseUser);
+          await deleteAllTutorData(firebaseUser);
           setSettingsOpen(false);
+          setGuestMode(false);
+          setPortalOpen(true);
         }}
       />
 
@@ -2449,7 +2599,7 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
         currentPage={currentPageNumber}
         onCreateManualNote={async (title, content) => {
           if (!activeBook) return;
-          await createNote(firebaseUser.uid, {
+          await createNote(activeUid, {
             bookId: activeBook.id,
             bookTitle: activeBook.title,
             chapterTitle: currentPageData?.chapterTitle || '',
@@ -2461,9 +2611,9 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
           showToast('تم حفظ الملاحظة.');
         }}
         onUpdateNote={(noteId, title, content) =>
-          updateNoteContent(firebaseUser.uid, noteId, title, content)
+          updateNoteContent(activeUid, noteId, title, content)
         }
-        onDeleteNote={(noteId) => deleteNoteRecord(firebaseUser.uid, noteId)}
+        onDeleteNote={(noteId) => deleteNoteRecord(activeUid, noteId)}
         onOpenNoteSource={(bookId, pageNumber) => {
           const target = books.find((b) => b.id === bookId);
           if (target) handleOpenBook(target, pageNumber);

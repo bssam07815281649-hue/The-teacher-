@@ -221,7 +221,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               className="w-full min-h-[44px] px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
-              <span>تسجيل الخروج</span>
+              <span>{profile.uid === 'guest_local' ? 'العودة إلى بوابة المدرسة' : 'تسجيل الخروج'}</span>
             </button>
 
             {!confirmDelete ? (
@@ -231,7 +231,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 className="w-full min-h-[44px] px-4 rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 text-sm font-medium flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" />
-                <span>حذف جميع البيانات والحساب</span>
+                <span>
+                  {profile.uid === 'guest_local'
+                    ? 'مسح جميع البيانات المحفوظة محلياً'
+                    : 'حذف جميع البيانات والحساب'}
+                </span>
               </button>
             ) : (
               <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 space-y-2">

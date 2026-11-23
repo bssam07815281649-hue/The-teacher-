@@ -1,13 +1,59 @@
 import { auth } from './firebase';
 import type { ChapterItem, DifficultyLevel, ImportantTaskItem, TutorLanguage } from '../types';
 
-async function authedPost<T>(endpoint: string, body: unknown): Promise<T> {
+let inMemoryGuestToken: { token: string; expiresAt: number } | null = null;
+
+export async function getTutorAuthToken(forceRefresh = false): Promise<string> {
   const user = auth.currentUser;
-  if (!user) {
-    throw new Error('يرجى تسجيل الدخول أولاً.');
+  if (user) {
+    return user.getIdToken(forceRefresh);
   }
-  const token = await user.getIdToken();
-  const res = await fetch(endpoint, {
+  if (!forceRefresh && inMemoryGuestToken && inMemoryGuestToken.expiresAt - Date.now() > 60_000) {
+    return inMemoryGuestToken.token;
+  }
+  const resp = await fetch('/api/ai/guest-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const data = (await resp.json().catch(() => ({}))) as {
+    token?: string;
+    expiresAt?: number;
+    error?: string;
+  };
+  if (!resp.ok || !data.token) {
+    throw new Error(data.error || 'تعذر بدء جلسة المعلم الذكي على الخادم.');
+  }
+  inMemoryGuestToken = {
+    token: data.token,
+    expiresAt: data.expiresAt || Date.now() + 5 * 60 * 60 * 1000,
+  };
+  return data.token;
+}
+
+export interface AiQuotaStatus {
+  model: string;
+  liveModel: string;
+  date: string;
+  ai: { limit: number; used: number; remaining: number };
+  live: { limit: number; used: number; remaining: number };
+}
+
+export async function fetchAiQuota(): Promise<AiQuotaStatus | null> {
+  try {
+    const token = await getTutorAuthToken(false);
+    const res = await fetch('/api/ai/quota', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as AiQuotaStatus;
+  } catch {
+    return null;
+  }
+}
+
+async function authedPost<T>(endpoint: string, body: unknown): Promise<T> {
+  let token = await getTutorAuthToken(false);
+  let res = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -15,6 +61,19 @@ async function authedPost<T>(endpoint: string, body: unknown): Promise<T> {
     },
     body: JSON.stringify(body),
   });
+
+  if (res.status === 401) {
+    token = await getTutorAuthToken(true);
+    res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error((data as { error?: string }).error || 'حدث خطأ أثناء الاتصال بالخادم.');

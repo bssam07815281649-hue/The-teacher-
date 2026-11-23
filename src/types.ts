@@ -244,3 +244,230 @@ export interface PageAudioState {
   error: string;
 }
 
+// === سجل الطالب الذكي (Smart Student Record) ===
+
+export type SchoolUserRole = 'admin' | 'counselor' | 'student';
+export type SchoolCodeStatus = 'active' | 'revoked' | 'unset';
+export type SchoolStudentStatus = 'active' | 'inactive' | 'transferred';
+export type GradePeriodId = 'term1' | 'midyear' | 'term2';
+export type GradeCellStatus = 'score' | 'blank' | 'absent' | 'exempt';
+export type AnnualPursuitScaleMode = 'scale100' | 'raw';
+
+export interface SchoolAnnouncement {
+  id: string;
+  title: string;
+  body: string;
+  pinned: boolean;
+  visibility: 'public' | 'internal';
+  createdAt: string;
+  updatedAt: string;
+  authorName: string;
+}
+
+export interface SchoolProfile {
+  id: string;
+  name: string;
+  academicYear: string;
+  directorate: string;
+  logoDataUrl?: string;
+  coverDataUrl?: string;
+  overview: string;
+  vision: string;
+  mission: string;
+  goals: string[];
+  updatedAt: string;
+}
+
+export interface SchoolStageGrade {
+  id: string;
+  name: string;
+  orderIndex: number;
+}
+
+export interface SchoolSection {
+  id: string;
+  stageId: string;
+  name: string;
+  counselorName: string;
+  counselorCodeStatus: SchoolCodeStatus;
+  counselorCodeUpdatedAt?: string;
+  counselorAccessCode?: string;
+  orderIndex: number;
+}
+
+export interface SchoolStudent {
+  id: string;
+  sectionId: string;
+  fullName: string;
+  status: SchoolStudentStatus;
+  studentCodeStatus: SchoolCodeStatus;
+  studentCodeUpdatedAt?: string;
+  studentAccessCode?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SmartImportTarget {
+  subjectId: string;
+  periodId: GradePeriodId;
+  subRecordName: string;
+  nonce: number;
+}
+
+export interface StudentAbsence {
+  id: string;
+  sectionId: string;
+  studentId: string;
+  date: string;
+  excuseType: 'excused' | 'unexcused' | 'medical' | 'official';
+  subjectName: string;
+  notes: string;
+  recordedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GradeCellValue {
+  status: GradeCellStatus;
+  score: number | null;
+}
+
+export interface GradeColumn {
+  id: string;
+  label: string;
+  maxScore: number;
+  orderIndex: number;
+}
+
+export interface CustomSubRecord {
+  id: string;
+  periodId: 'term1' | 'term2';
+  name: string;
+  orderIndex: number;
+  columns: GradeColumn[];
+}
+
+export interface AnnualPursuitConfig {
+  term1ColumnIds: string[];
+  midyearColumnIds: string[];
+  term2ColumnIds: string[];
+  scaleMode: AnnualPursuitScaleMode;
+}
+
+export interface SubjectGradebook {
+  id: string;
+  sectionId: string;
+  name: string;
+  midyearColumns: GradeColumn[];
+  subRecords: CustomSubRecord[];
+  // Map of `${studentId}::${columnId}` -> GradeCellValue
+  cells: Record<string, GradeCellValue>;
+  annualPursuitConfig: AnnualPursuitConfig;
+  updatedAt: string;
+}
+
+export interface ImportBoundingBox {
+  id: string;
+  label: string;
+  role: 'name' | 'score';
+  columnOrder: number;
+  x: number; // normalized 0..1
+  y: number; // normalized 0..1
+  width: number; // normalized 0..1
+  height: number; // normalized 0..1
+}
+
+export interface ImportTemplate {
+  id: string;
+  name: string;
+  description: string;
+  boxes: ImportBoundingBox[];
+  createdAt: string;
+}
+
+export interface ImportExtractedCell {
+  columnIndex: number;
+  rawText: string;
+  parsedStatus: GradeCellStatus;
+  parsedScore: number | null;
+}
+
+export interface ImportExtractedRow {
+  rowIndex: number;
+  rawNameText: string;
+  cells: ImportExtractedCell[];
+}
+
+export interface ImportExtractionResult {
+  detectedHeaders: { columnIndex: number; label: string; maxScore: number | null }[];
+  rows: ImportExtractedRow[];
+  warnings: string[];
+}
+
+export interface AuditLogEntry {
+  id: string;
+  actorName: string;
+  actorRole: SchoolUserRole | 'system';
+  action: string;
+  targetType: string;
+  targetId: string;
+  targetLabel: string;
+  prevValue: string;
+  nextValue: string;
+  timestamp: string;
+}
+
+export interface SchoolFirebaseSyncMeta {
+  linked: boolean;
+  projectId: string;
+  linkedEmail: string;
+  linkedUid: string;
+  lastSyncedAt: string;
+  lastSyncStatus: 'idle' | 'connected' | 'synced' | 'offline' | 'error';
+  lastSyncMessage: string;
+}
+
+export interface SchoolSessionUser {
+  role: SchoolUserRole;
+  displayName: string;
+  schoolId?: string;
+  ownerEmail?: string;
+  sectionId?: string;
+  sectionName?: string;
+  stageName?: string;
+  studentId?: string;
+}
+
+export interface SchoolPublicPayload {
+  school: SchoolProfile;
+  announcements: SchoolAnnouncement[];
+  stagesCount: number;
+  sectionsCount: number;
+  adminCodeConfigured: boolean;
+  firebaseSync: SchoolFirebaseSyncMeta;
+}
+
+export interface SchoolBackupSummary {
+  fileName: string;
+  createdAt: string;
+  sizeBytes: number;
+}
+
+export interface SchoolWorkspacePayload {
+  session: SchoolSessionUser;
+  school: SchoolProfile;
+  announcements: SchoolAnnouncement[];
+  stages: SchoolStageGrade[];
+  sections: SchoolSection[];
+  students: SchoolStudent[];
+  absences: StudentAbsence[];
+  subjects: SubjectGradebook[];
+  templates: ImportTemplate[];
+  auditLogs: AuditLogEntry[];
+  firebaseSync: SchoolFirebaseSyncMeta;
+  backups: SchoolBackupSummary[];
+  adminCodeConfigured?: boolean;
+}
+
+

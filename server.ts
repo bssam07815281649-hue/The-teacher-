@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -12,13 +13,16 @@ import {
   type FunctionDeclaration,
   type LiveServerMessage,
 } from '@google/genai';
+import { SchoolRecordStore } from './server/schoolRecordStore';
+import { createSchoolRecordRouter } from './server/schoolRecordRoutes';
+import { DailyAiQuotaTracker } from './server/aiQuota';
 
 const PORT = 3000;
 const ALLOWED_TEXT_MODELS = new Set([
+  'gemini-3.1-flash-lite',
   'gemini-4-hydrogen',
   'gemini-4-argon',
   'gemini-4-carbon',
-  'gemini-3.1-flash-lite',
 ]);
 const ALLOWED_LIVE_MODELS = new Set([
   'gemini-3.8-live',
@@ -30,10 +34,14 @@ function resolveModel(envValue: string | undefined, allowed: Set<string>, fallba
   return allowed.has(candidate) ? candidate : fallback;
 }
 
-const GEMINI_TEXT_MODEL = resolveModel(process.env.GEMINI_TEXT_MODEL, ALLOWED_TEXT_MODELS, 'gemini-4-hydrogen');
+const GEMINI_TEXT_MODEL = resolveModel(process.env.GEMINI_TEXT_MODEL, ALLOWED_TEXT_MODELS, 'gemini-3.1-flash-lite');
 const GEMINI_LIVE_MODEL = resolveModel(process.env.GEMINI_LIVE_MODEL, ALLOWED_LIVE_MODELS, 'gemini-3.8-live');
 const GEMINI_TTS_MODEL = 'gemini-3.8-flash-lite-tts';
 const GEMINI_TRANSCRIBE_MODEL = 'gemini-3.5-transcribe';
+
+const aiQuotaTracker = new DailyAiQuotaTracker({
+  storageFilePath: path.resolve(process.cwd(), '.school-record-data', 'ai-daily-quota.json'),
+});
 
 const firebaseConfigPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
 const firebaseConfig = fs.existsSync(firebaseConfigPath)
@@ -57,14 +65,24 @@ function getAiClient(apiVersion = 'v1beta'): GoogleGenAI {
   });
 }
 
-// Token verification cache (token -> { uid, email, exp })
-const tokenCache = new Map<string, { uid: string; email: string; expiresAt: number }>();
+// Token verification cache (token -> { uid, email, emailVerified, displayName, exp })
+const tokenCache = new Map<
+  string,
+  { uid: string; email: string; emailVerified: boolean; displayName?: string; expiresAt: number }
+>();
 
-async function verifyFirebaseIdToken(idToken: string): Promise<{ uid: string; email: string } | null> {
+async function verifyFirebaseIdToken(
+  idToken: string
+): Promise<{ uid: string; email: string; emailVerified: boolean; displayName?: string } | null> {
   if (!idToken || idToken.length < 20) return null;
   const cached = tokenCache.get(idToken);
   if (cached && cached.expiresAt > Date.now()) {
-    return { uid: cached.uid, email: cached.email };
+    return {
+      uid: cached.uid,
+      email: cached.email,
+      emailVerified: cached.emailVerified,
+      displayName: cached.displayName,
+    };
   }
   if (!firebaseConfig.apiKey) return null;
   try {
@@ -76,51 +94,176 @@ async function verifyFirebaseIdToken(idToken: string): Promise<{ uid: string; em
         body: JSON.stringify({ idToken }),
       }
     );
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      console.warn(`Firebase accounts:lookup failed (${resp.status}):`, errText.slice(0, 300));
+      return null;
+    }
     const data = (await resp.json()) as {
-      users?: { localId?: string; email?: string; emailVerified?: boolean }[];
+      users?: {
+        localId?: string;
+        email?: string;
+        displayName?: string;
+        emailVerified?: boolean;
+        providerUserInfo?: { providerId?: string; email?: string; displayName?: string }[];
+      }[];
     };
     const u = data.users?.[0];
     if (!u?.localId) return null;
-    const result = { uid: u.localId, email: u.email || '' };
+    const googleProviderInfo = u.providerUserInfo?.find((p) => p.providerId === 'google.com' && p.email);
+    const resolvedEmail = (u.email || googleProviderInfo?.email || '').trim();
+    const resolvedVerified = Boolean(u.emailVerified || googleProviderInfo?.email);
+    const resolvedDisplayName = (u.displayName || googleProviderInfo?.displayName || '').trim();
+    const result = {
+      uid: u.localId,
+      email: resolvedEmail,
+      emailVerified: resolvedVerified,
+      displayName: resolvedDisplayName || undefined,
+    };
     tokenCache.set(idToken, { ...result, expiresAt: Date.now() + 5 * 60 * 1000 });
     return result;
+  } catch (err) {
+    console.warn('Firebase accounts:lookup exception:', err);
+    return null;
+  }
+}
+
+const RUNTIME_GUEST_TUTOR_SECRET = crypto.randomBytes(32);
+
+function getGuestTutorSigningKey(): Buffer {
+  const envSecret = (process.env.TUTOR_GUEST_SECRET || process.env.SCHOOL_SESSION_SECRET || '').trim();
+  if (envSecret.length >= 16) {
+    return crypto.createHash('sha256').update(`tutor-guest:${envSecret}`).digest();
+  }
+  return RUNTIME_GUEST_TUTOR_SECRET;
+}
+
+interface GuestTutorPayload {
+  kind: 'tutor_guest';
+  gid: string;
+  iat: number;
+  exp: number;
+}
+
+function createGuestTutorToken(): { token: string; expiresAt: number } {
+  const now = Date.now();
+  const expiresAt = now + 6 * 60 * 60 * 1000;
+  const payload: GuestTutorPayload = {
+    kind: 'tutor_guest',
+    gid: `guest_${crypto.randomBytes(8).toString('hex')}`,
+    iat: now,
+    exp: expiresAt,
+  };
+  const encoded = Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64url');
+  const sig = crypto.createHmac('sha256', getGuestTutorSigningKey()).update(encoded).digest('base64url');
+  return { token: `${encoded}.${sig}`, expiresAt };
+}
+
+function verifyGuestTutorToken(token: string): { uid: string } | null {
+  if (!token || !token.includes('.')) return null;
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const [encoded, providedSig] = parts;
+  try {
+    const expectedSig = crypto.createHmac('sha256', getGuestTutorSigningKey()).update(encoded).digest('base64url');
+    const a = Buffer.from(providedSig, 'utf-8');
+    const b = Buffer.from(expectedSig, 'utf-8');
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf-8')) as GuestTutorPayload;
+    if (!payload || payload.kind !== 'tutor_guest' || !payload.gid || !payload.exp || payload.exp < Date.now()) {
+      return null;
+    }
+    return { uid: payload.gid };
   } catch {
     return null;
   }
 }
 
-// Simple per-user rate limit (max 90 AI requests per minute)
+// Per-user / per-IP rate limit
 const rateLimits = new Map<string, { count: number; resetAt: number }>();
-function checkRateLimit(uid: string): boolean {
+function checkRateLimit(key: string, maxPerMinute = 90): boolean {
   const now = Date.now();
-  const entry = rateLimits.get(uid);
+  const entry = rateLimits.get(key);
   if (!entry || entry.resetAt < now) {
-    rateLimits.set(uid, { count: 1, resetAt: now + 60_000 });
+    rateLimits.set(key, { count: 1, resetAt: now + 60_000 });
     return true;
   }
-  if (entry.count >= 90) return false;
+  if (entry.count >= maxPerMinute) return false;
   entry.count += 1;
   return true;
 }
 
-interface AuthedRequest extends Request {
-  user?: { uid: string; email: string };
+function getClientIpKey(req: Pick<http.IncomingMessage, 'headers' | 'socket'> & { ip?: string }): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  const firstForwarded = Array.isArray(forwarded)
+    ? forwarded[0]
+    : typeof forwarded === 'string'
+    ? forwarded.split(',')[0]
+    : '';
+  return (req.ip || firstForwarded || req.socket?.remoteAddress || 'unknown').trim();
 }
 
-async function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+interface AuthedRequest extends Request {
+  user?: { uid: string; email: string; isGuest?: boolean; quotaSubjectKey: string };
+}
+
+async function authenticateTutorRequest(
+  req: AuthedRequest,
+  res: Response
+): Promise<{ uid: string; email: string; isGuest: boolean; quotaSubjectKey: string } | null> {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
   const verified = await verifyFirebaseIdToken(token);
-  if (!verified) {
-    res.status(401).json({ error: 'يرجى تسجيل الدخول بحساب Google للمتابعة.' });
+  if (verified) {
+    if (!checkRateLimit(`uid:${verified.uid}`, 90)) {
+      res.status(429).json({ error: 'تم تجاوز الحد المؤقت للطلبات، يرجى الانتظار قليلاً.' });
+      return null;
+    }
+    return {
+      uid: verified.uid,
+      email: verified.email,
+      isGuest: false,
+      quotaSubjectKey: `uid:${verified.uid}`,
+    };
+  }
+
+  const guest = verifyGuestTutorToken(token);
+  if (guest) {
+    const ipKey = getClientIpKey(req);
+    if (!checkRateLimit(`guest_ip:${ipKey}`, 35)) {
+      res.status(429).json({ error: 'تم تجاوز الحد المؤقت للطلبات، يرجى الانتظار دقيقة واحدة.' });
+      return null;
+    }
+    return {
+      uid: guest.uid,
+      email: '',
+      isGuest: true,
+      quotaSubjectKey: `guest_ip:${ipKey}`,
+    };
+  }
+
+  res.status(401).json({ error: 'انتهت جلسة المعلم الذكي المؤقتة. أعد المحاولة وسيتم تجديدها تلقائياً.' });
+  return null;
+}
+
+async function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+  const identity = await authenticateTutorRequest(req, res);
+  if (!identity) return;
+
+  const daily = aiQuotaTracker.consume('ai', identity.quotaSubjectKey, identity.isGuest);
+  res.setHeader('X-AI-Daily-Limit', String(daily.limit));
+  res.setHeader('X-AI-Daily-Remaining', String(daily.remaining));
+  if (!daily.allowed) {
+    res.status(429).json({
+      error: `وصلت إلى الحد اليومي المسموح به لطلبات المعلم الذكي (${daily.limit} طلباً في اليوم) لحماية الحصة المجانية. يتجدد الرصيد تلقائياً عند منتصف الليل.`,
+      quotaExceeded: true,
+      date: daily.date,
+      limit: daily.limit,
+    });
     return;
   }
-  if (!checkRateLimit(verified.uid)) {
-    res.status(429).json({ error: 'تم تجاوز الحد المؤقت للطلبات، يرجى الانتظار قليلاً.' });
-    return;
-  }
-  req.user = verified;
+
+  req.user = identity;
   next();
 }
 
@@ -412,10 +555,43 @@ const LIVE_AND_CHAT_TOOLS: FunctionDeclaration[] = [
 
 async function bootstrapServer() {
   const app = express();
+  app.set('trust proxy', 1);
   app.use(express.json({ limit: '25mb' }));
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, model: GEMINI_TEXT_MODEL, liveModel: GEMINI_LIVE_MODEL });
+  });
+
+  const schoolRecordStore = new SchoolRecordStore();
+  app.use(
+    '/api/school-record',
+    createSchoolRecordRouter(schoolRecordStore, {
+      getAiClient: () => getAiClient(),
+      geminiTextModel: GEMINI_TEXT_MODEL,
+      verifyFirebaseIdToken,
+    })
+  );
+
+  // Public guest tutor session token endpoint (allows open access to AI Smart Tutor without login or code, rate-limited per IP)
+  app.post('/api/ai/guest-session', (req: Request, res: Response) => {
+    const ipKey = getClientIpKey(req);
+    if (!checkRateLimit(`guest_issue:${ipKey}`, 30)) {
+      res.status(429).json({ error: 'تم تجاوز الحد المؤقت لبدء الجلسات، يرجى الانتظار قليلاً.' });
+      return;
+    }
+    res.json(createGuestTutorToken());
+  });
+
+  // Current user/guest daily quota & active free-tier model status (does not consume quota)
+  app.get('/api/ai/quota', async (req: AuthedRequest, res: Response) => {
+    const identity = await authenticateTutorRequest(req, res);
+    if (!identity) return;
+    const snapshot = aiQuotaTracker.peek(identity.quotaSubjectKey, identity.isGuest);
+    res.json({
+      model: GEMINI_TEXT_MODEL,
+      liveModel: GEMINI_LIVE_MODEL,
+      ...snapshot,
+    });
   });
 
   // 1. Analyze single book page (OCR if scanned + concepts/diagrams/difficulty/time)
@@ -1424,14 +1600,30 @@ ${question.options && question.options.length > 0 ? `- الخيارات: ${quest
 
     const token = reqUrl.searchParams.get('token') || '';
     const verified = await verifyFirebaseIdToken(token);
-    if (!verified) {
+    const guest = !verified ? verifyGuestTutorToken(token) : null;
+    if (!verified && !guest) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;
     }
+    const ipKey = getClientIpKey(request);
+    if (guest && !checkRateLimit(`guest_live_ip:${ipKey}`, 20)) {
+      socket.write('HTTP/1.1 429 Too Many Requests\r\n\r\n');
+      socket.destroy();
+      return;
+    }
 
+    const quotaKey = verified ? `uid:${verified.uid}` : `guest_ip:${ipKey}`;
+    const dailyLive = aiQuotaTracker.consume('live', quotaKey, !verified);
+    if (!dailyLive.allowed) {
+      socket.write('HTTP/1.1 429 Too Many Requests\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    const identity = verified || { uid: guest!.uid, email: '' };
     wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit('connection', ws, request, verified);
+      wss.emit('connection', ws, request, identity);
     });
   });
 

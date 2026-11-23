@@ -10,8 +10,32 @@ import {
   CalendarCheck,
   FileCheck2,
   GraduationCap,
+  Building2,
+  Loader2,
+  UserCheck,
 } from 'lucide-react';
-import type { Book, SchoolExamType, SchoolGrade } from '../types';
+import type {
+  Book,
+  SchoolExamType,
+  SchoolGrade,
+  SchoolPublicPayload,
+  SchoolSessionUser,
+  SchoolWorkspacePayload,
+} from '../types';
+import {
+  clearSchoolSessionToken,
+  fetchSchoolPublic,
+  fetchSchoolWorkspace,
+  getSchoolSessionToken,
+  logoutSchoolSession,
+  setSchoolUnauthorizedHandler,
+} from '../services/schoolRecordClient';
+import { PublicSchoolPortal } from './school-record/PublicSchoolPortal';
+import { AdminDashboard } from './school-record/AdminDashboard';
+import { AdminFirebaseModal } from './school-record/AdminFirebaseModal';
+import { CounselorWorkspace } from './school-record/CounselorWorkspace';
+import { StudentRecordPortal } from './school-record/StudentRecordPortal';
+import { AdminGate } from './AdminGate';
 
 interface SchoolGradesTabProps {
   grades: SchoolGrade[];
@@ -106,6 +130,83 @@ export const SchoolGradesTab: React.FC<SchoolGradesTabProps> = ({
   onBuildRemedialPlan,
   onPracticeWeakArea,
 }) => {
+  const [portalMode, setPortalMode] = useState<'smart_school' | 'personal'>('smart_school');
+  const [publicData, setPublicData] = useState<SchoolPublicPayload | null>(null);
+  const [workspace, setWorkspace] = useState<SchoolWorkspacePayload | null>(null);
+  const [loadingPortal, setLoadingPortal] = useState(true);
+  const [portalError, setPortalError] = useState('');
+  const [adminEnteredSectionId, setAdminEnteredSectionId] = useState<string | null>(null);
+  const [showFirebaseModal, setShowFirebaseModal] = useState(false);
+  const [showAdminGoogleGate, setShowAdminGoogleGate] = useState(false);
+  const [pendingAdminCode, setPendingAdminCode] = useState('');
+
+  const loadPublic = async () => {
+    try {
+      const data = await fetchSchoolPublic();
+      setPublicData(data);
+      setPortalError('');
+    } catch (err) {
+      setPortalError(err instanceof Error ? err.message : 'تعذر تحميل الصفحة العامة للمدرسة.');
+    }
+  };
+
+  const loadWorkspace = async () => {
+    const ws = await fetchSchoolWorkspace();
+    setWorkspace(ws);
+    setPortalError('');
+  };
+
+  React.useEffect(() => {
+    let mounted = true;
+    setSchoolUnauthorizedHandler(() => {
+      if (!mounted) return;
+      setWorkspace(null);
+      setAdminEnteredSectionId(null);
+      setPortalError('تم إنهاء الجلسة أو تغيير الكود. يرجى تسجيل الدخول بالكود مجدداً.');
+      void loadPublic();
+    });
+
+    (async () => {
+      setLoadingPortal(true);
+      await loadPublic();
+      if (getSchoolSessionToken()) {
+        try {
+          await loadWorkspace();
+        } catch {
+          clearSchoolSessionToken();
+          setWorkspace(null);
+        }
+      }
+      if (mounted) setLoadingPortal(false);
+    })();
+
+    return () => {
+      mounted = false;
+      setSchoolUnauthorizedHandler(null);
+    };
+  }, []);
+
+  const handleLoginSuccess = async (_session: SchoolSessionUser) => {
+    setLoadingPortal(true);
+    setPortalError('');
+    try {
+      await loadWorkspace();
+      setAdminEnteredSectionId(null);
+    } catch (err) {
+      setPortalError(err instanceof Error ? err.message : 'تعذر فتح سجل الطالب الذكي.');
+    } finally {
+      setLoadingPortal(false);
+    }
+  };
+
+  const handleSchoolLogout = async () => {
+    await logoutSchoolSession();
+    setWorkspace(null);
+    setAdminEnteredSectionId(null);
+    setShowFirebaseModal(false);
+    await loadPublic();
+  };
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [subject, setSubject] = useState('');
   const [examType, setExamType] = useState<SchoolExamType>('month1');
@@ -270,6 +371,127 @@ export const SchoolGradesTab: React.FC<SchoolGradesTabProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Mode Switcher: Smart School Record vs Preserved Personal Grade Tracker */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-2 flex flex-wrap items-center gap-2 shadow-xs">
+        <button
+          type="button"
+          onClick={() => setPortalMode('smart_school')}
+          className={`flex-1 min-w-[200px] min-h-[44px] px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors ${
+            portalMode === 'smart_school'
+              ? 'bg-[#653CF5] text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-300 hover:bg-[#F7F7FC] dark:hover:bg-slate-800'
+          }`}
+        >
+          <Building2 className="w-4 h-4" />
+          <span>سجل الطالب الذكي (المدرسة والصف)</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPortalMode('personal')}
+          className={`flex-1 min-w-[200px] min-h-[44px] px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors ${
+            portalMode === 'personal'
+              ? 'bg-[#653CF5] text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-300 hover:bg-[#F7F7FC] dark:hover:bg-slate-800'
+          }`}
+        >
+          <UserCheck className="w-4 h-4" />
+          <span>سجلي الشخصي (درجاتي الخاصة · {grades.length})</span>
+        </button>
+      </div>
+
+      {portalMode === 'smart_school' ? (
+        <div className="space-y-5">
+          {portalError && (
+            <div role="alert" className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-xs sm:text-sm text-red-700 dark:text-red-300 font-medium">
+              {portalError}
+            </div>
+          )}
+
+          {showAdminGoogleGate ? (
+            <AdminGate
+              initialAdminCode={pendingAdminCode}
+              onBack={() => {
+                setShowAdminGoogleGate(false);
+                setPendingAdminCode('');
+                if (getSchoolSessionToken()) {
+                  void loadWorkspace().catch(() => {
+                    clearSchoolSessionToken();
+                    void loadPublic();
+                  });
+                } else {
+                  void loadPublic();
+                }
+              }}
+            />
+          ) : loadingPortal ? (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-10 text-center space-y-2">
+              <Loader2 className="w-7 h-7 animate-spin text-[#653CF5] mx-auto" />
+              <p className="text-xs sm:text-sm text-slate-500">جاري تحميل بوابة سجل الطالب الذكي...</p>
+            </div>
+          ) : !workspace ? (
+            publicData ? (
+              <PublicSchoolPortal
+                publicData={publicData}
+                onLoginSuccess={handleLoginSuccess}
+                onAdminGoogleLogin={(adminCode) => {
+                  setPendingAdminCode(adminCode || '');
+                  setShowAdminGoogleGate(true);
+                }}
+              />
+            ) : null
+          ) : workspace.session.role === 'admin' ? (
+            <>
+              {adminEnteredSectionId ? (
+                <CounselorWorkspace
+                  workspace={workspace}
+                  sectionId={adminEnteredSectionId}
+                  onWorkspaceRefresh={loadWorkspace}
+                  onBackToAdmin={() => setAdminEnteredSectionId(null)}
+                  onLogout={handleSchoolLogout}
+                />
+              ) : (
+                <AdminDashboard
+                  workspace={workspace}
+                  onWorkspaceRefresh={loadWorkspace}
+                  onEnterSection={(secId) => setAdminEnteredSectionId(secId)}
+                  onOpenFirebaseModal={() => setShowFirebaseModal(true)}
+                  onLogout={handleSchoolLogout}
+                />
+              )}
+
+              {showFirebaseModal && (
+                <AdminFirebaseModal
+                  workspace={workspace}
+                  onClose={() => setShowFirebaseModal(false)}
+                  onSyncMetaUpdated={(meta) => {
+                    setWorkspace((prev) => (prev ? { ...prev, firebaseSync: meta } : prev));
+                    void loadPublic();
+                  }}
+                  onWorkspaceRestored={loadWorkspace}
+                />
+              )}
+            </>
+          ) : workspace.session.role === 'counselor' ? (
+            <CounselorWorkspace
+              workspace={workspace}
+              sectionId={workspace.session.sectionId || workspace.sections[0]?.id || ''}
+              onWorkspaceRefresh={loadWorkspace}
+              onLogout={handleSchoolLogout}
+            />
+          ) : (
+            <StudentRecordPortal
+              workspace={workspace}
+              books={books}
+              onWorkspaceRefresh={loadWorkspace}
+              onBuildRemedialPlan={onBuildRemedialPlan}
+              onPracticeWeakArea={onPracticeWeakArea}
+              onLogout={handleSchoolLogout}
+            />
+          )}
+        </div>
+      ) : (
+        <>
       {/* Top Diagnosis & Improvement Overview */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -691,6 +913,8 @@ export const SchoolGradesTab: React.FC<SchoolGradesTabProps> = ({
           )}
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };
