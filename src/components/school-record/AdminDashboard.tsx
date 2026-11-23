@@ -1106,6 +1106,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <span>
                                 المرشد: <strong>{sec.counselorName || 'غير محدد'}</strong>
                               </span>
+                              <span className="rounded-lg bg-slate-100 px-2 py-1 text-[11px] dark:bg-slate-800">آخر حفظ وصل من المرشد: {sec.lastCounselorSavedAt ? new Date(sec.lastCounselorSavedAt).toLocaleString('ar-IQ') : 'لم تُحفظ تعديلات بعد'}</span>
                               {sec.counselorCodeStatus === 'active' &&
                                 (sec.counselorAccessCode ? (
                                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#EEEAFF] dark:bg-violet-950/60 border border-[#653CF5]/30 text-[#4320D9] dark:text-violet-200">
