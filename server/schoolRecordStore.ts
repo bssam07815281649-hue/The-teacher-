@@ -8,6 +8,8 @@ import type {
   CustomSubRecord,
   GradeCellValue,
   GradeColumn,
+  GradePeriodId,
+  ReleasedPeriod,
   ImportBoundingBox,
   ImportTemplate,
   SchoolAnnouncement,
@@ -26,7 +28,7 @@ import type {
   StudentAbsence,
   SubjectGradebook,
 } from '../src/types';
-import { computeStudentSubjectSummary, makeCellKey } from '../src/utils/gradeCalculations';
+import { computeStudentSubjectSummary, getTermColumns, makeCellKey } from '../src/utils/gradeCalculations';
 
 const scryptAsync = promisify(crypto.scrypt);
 const RUNTIME_FALLBACK_SESSION_SECRET = crypto.randomBytes(32);
@@ -493,7 +495,6 @@ export class SchoolRecordStore {
       stagesCount: tenant.stages.length,
       sectionsCount: tenant.sections.length,
       adminCodeConfigured: this.isAdminCodeConfigured(),
-      firebaseSync: { ...tenant.firebaseSync },
     };
   }
 
@@ -935,7 +936,6 @@ export class SchoolRecordStore {
           .map((sb) => ({ ...sb })),
         templates: [...tenant.templates],
         auditLogs: [],
-        firebaseSync: { ...tenant.firebaseSync },
         backups: [],
       };
     }
@@ -947,17 +947,19 @@ export class SchoolRecordStore {
     const ownSubjects: SubjectGradebook[] = tenant.subjects
       .filter((sb) => sb.sectionId === secId)
       .map((sb) => {
-        const filteredCells: Record<string, GradeCellValue> = {};
-        const prefix = `${studentId}::`;
-        for (const [key, val] of Object.entries(sb.cells || {})) {
-          if (key.startsWith(prefix)) {
-            filteredCells[key] = val;
-          }
+        const releases: SubjectGradebook['releases'] = {};
+        for (const period of ['term1', 'midyear', 'term2'] as const) {
+          const release = sb.releases?.[period];
+          if (!release) continue;
+          const cells = Object.fromEntries(Object.entries(release.cells)
+            .filter(([key]) => key.startsWith(studentId + '::')));
+          if (Object.keys(cells).length === 0) continue;
+          const grade = release.official[studentId];
+          releases[period] = { ...release, cells, official: grade == null ? {} : { [studentId]: grade } };
         }
-        return {
-          ...sb,
-          cells: filteredCells,
-        };
+        return { id: sb.id, name: sb.name, sectionId: secId, releases, cells: {},
+          midyearColumns: [], subRecords: [], updatedAt: sb.updatedAt,
+          annualPursuitConfig: { term1ColumnIds: [], midyearColumnIds: [], term2ColumnIds: [], scaleMode: 'scale100' } };
       });
 
     return {
@@ -975,7 +977,6 @@ export class SchoolRecordStore {
       subjects: ownSubjects,
       templates: [],
       auditLogs: [],
-      firebaseSync: { ...tenant.firebaseSync },
       backups: [],
     };
   }
@@ -985,11 +986,17 @@ export class SchoolRecordStore {
       throw new SchoolRecordError(403, 'هذا المسار مخصص لحساب الطالب فقط.');
     }
     const workspace = this.getWorkspaceForSession(session);
-    const summaries = workspace.subjects.map((subj) => ({
-      subjectId: subj.id,
-      subjectName: subj.name,
-      summary: computeStudentSubjectSummary(subj, session.studentId!),
-    }));
+    const summaries = workspace.subjects.map(subj => {
+      const periods = ['term1','midyear','term2'] as const;
+      const values = periods.map(p => subj.releases?.[p]?.official[session.studentId!] ?? null);
+      const numeric = values.filter((v): v is number => v !== null);
+      const mean = numeric.length ? Math.round(numeric.reduce((a,b) => a+b,0) * 10 / numeric.length) / 10 : null;
+      return { subjectId: subj.id, subjectName: subj.name, summary: {
+        term1Avg: values[0], midyearAvg: values[1], term2Avg: values[2],
+        isComplete: numeric.length === 3, annualPursuit: numeric.length === 3 ? mean : null,
+        percentageEquivalent: mean, missingPeriods: periods.filter((_,i) => values[i] === null),
+      }};
+    });
     return {
       student: workspace.students[0] || null,
       sectionName: session.sectionName || '',
@@ -2054,6 +2061,37 @@ export class SchoolRecordStore {
       }
     }
     return null;
+  }
+
+  public releasePeriod(session: SchoolSessionUser, sectionId: string, subjectId: string, period: GradePeriodId, approve: boolean) {
+    const tenant = this.assertSectionManager(session, sectionId);
+    if (!['term1', 'midyear', 'term2'].includes(period) || typeof approve !== 'boolean')
+      throw new SchoolRecordError(400, 'طلب نشر غير صالح.');
+    const subject = tenant.subjects.find(s => s.sectionId === sectionId && s.id === subjectId);
+    if (!subject) throw new SchoolRecordError(404, 'المادة غير موجودة.');
+    const columns = getTermColumns(subject, period);
+    const selected = subject.annualPursuitConfig[period === 'midyear' ? 'midyearColumnIds' : period === 'term1' ? 'term1ColumnIds' : 'term2ColumnIds'];
+    const counted = columns.filter(c => selected.includes(c.id));
+    const release: ReleasedPeriod = { updatedAt: new Date().toISOString(), approved: approve,
+      columns: structuredClone(columns), cells: {}, official: {} };
+    for (const student of tenant.students.filter(s => s.sectionId === sectionId)) {
+      for (const col of columns) {
+        const key = makeCellKey(student.id, col.id);
+        const cell = subject.cells[key];
+        if (cell && cell.status !== 'blank') release.cells[key] = { ...cell };
+      }
+      if (!approve || !counted.length) continue;
+      const marks = counted.map(c => ({ col: c, cell: release.cells[makeCellKey(student.id, c.id)] }));
+      if (marks.some(m => !m.cell || !['score','exempt'].includes(m.cell.status))) continue;
+      const numeric = marks.filter(m => m.cell.status === 'score' && m.cell.score != null);
+      if (numeric.length) release.official[student.id] = Math.round(1000 * numeric.reduce((sum,m) =>
+        sum + m.cell.score! / m.col.maxScore, 0) / numeric.length) / 10;
+    }
+    if (!Object.keys(release.cells).length) throw new SchoolRecordError(400, 'لا توجد درجات محفوظة للنشر.');
+    if (approve && !Object.keys(release.official).length) throw new SchoolRecordError(400, 'لم تكتمل درجات الأعمدة المحددة للحساب لأي طالب.');
+    subject.releases = { ...subject.releases, [period]: release };
+    this.appendAudit(tenant, { name: session.displayName, role: session.role }, approve ? 'اعتماد فترة' : 'نشر درجات', 'subject', subjectId, subject.name, '', period);
+    this.persist();
   }
 
   public updateGradeCells(

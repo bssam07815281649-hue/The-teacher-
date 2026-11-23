@@ -355,7 +355,16 @@ export interface AnnualPursuitConfig {
   scaleMode: AnnualPursuitScaleMode;
 }
 
+export interface ReleasedPeriod {
+  updatedAt: string;
+  approved: boolean;
+  columns: GradeColumn[];
+  cells: Record<string, GradeCellValue>;
+  official: Record<string, number>;
+}
+
 export interface SubjectGradebook {
+  releases?: Partial<Record<GradePeriodId, ReleasedPeriod>>;
   id: string;
   sectionId: string;
   name: string;
@@ -445,7 +454,6 @@ export interface SchoolPublicPayload {
   stagesCount: number;
   sectionsCount: number;
   adminCodeConfigured: boolean;
-  firebaseSync: SchoolFirebaseSyncMeta;
 }
 
 export interface SchoolBackupSummary {
@@ -465,7 +473,7 @@ export interface SchoolWorkspacePayload {
   subjects: SubjectGradebook[];
   templates: ImportTemplate[];
   auditLogs: AuditLogEntry[];
-  firebaseSync: SchoolFirebaseSyncMeta;
+  firebaseSync?: SchoolFirebaseSyncMeta;
   backups: SchoolBackupSummary[];
   adminCodeConfigured?: boolean;
 }

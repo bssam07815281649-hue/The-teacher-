@@ -365,6 +365,25 @@ test('Server security, RBAC scope isolation, session revocation, rate limiting, 
     assert.equal(goodImport.status, 200);
     assert.equal(goodImport.data.appliedCount, 1);
 
+    const releasedId = goodImport.data.subject.id;
+    const path = `/sections/${secAId}/subjects/${releasedId}/release`;
+    const release = (token: string, approve: boolean) => apiJson(baseUrl, path, {
+      method: 'POST', token, body: {period:'term1', approve},
+    });
+    const readStudentSubject = async () => {
+      const result = await apiJson(baseUrl, '/workspace', {token:stuToken});
+      assert.equal(result.data.firebaseSync, undefined);
+      return result.data.subjects.find((s: any) => s.id === releasedId);
+    };
+    assert.deepEqual((await readStudentSubject())?.releases ?? {}, {});
+    assert.equal((await release(stuToken,true)).status,403);
+    assert.equal((await release(cslAToken,false)).status,200);
+    const published = (await readStudentSubject()).releases.term1;
+    assert.deepEqual(published.official,{});
+    assert.equal(Object.values(published.cells).length,1);
+    assert.equal((await release(cslAToken,true)).status,200);
+    assert.equal((await readStudentSubject()).releases.term1.official[stu1Id],90);
+
     // Verify role-scoped code visibility BEFORE revoking counselor A
     const adminWsCheck = await apiJson(baseUrl, '/workspace', { token: adminToken });
     assert.equal(adminWsCheck.status, 200);

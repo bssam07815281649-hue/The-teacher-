@@ -40,6 +40,7 @@ import {
 import {
   deleteSubjectApi,
   updateGradeCellsApi,
+  releaseGrades,
   upsertSubjectApi,
 } from '../../services/schoolRecordClient';
 import { generateMatchingA4Pdf, type A4PdfExportResult } from '../../services/a4PdfExport';
@@ -983,6 +984,21 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
             ))}
           </div>
 
+          {activeTab !== 'pursuit' && <div className="flex flex-wrap gap-2">
+            {[false,true].map(approve => <button key={String(approve)} type="button"
+              className="rounded-xl border px-4 py-2 font-bold" disabled={savingStructure || savingCells || pendingDraftCount > 0}
+              onClick={async () => {
+                const label = approve ? 'اعتماد درجة الفترة' : 'نشر الدرجات دون اعتماد';
+                if (!window.confirm(label + ' للطلبة؟')) return;
+                setSavingStructure(true);
+                try {
+                  await releaseGrades(section.id, activeSubject.id, activeTab, approve);
+                  await onWorkspaceRefresh();
+                  showToast(approve ? 'تم اعتماد الدرجات المكتملة.' : 'تم نشر تفاصيل الدرجات.');
+                } catch (err) { setError(err instanceof Error ? err.message : 'تعذّر النشر.'); }
+                finally { setSavingStructure(false); }
+              }}>{approve ? 'اعتماد درجة الفترة' : 'نشر الدرجات دون اعتماد'}</button>)}
+          </div>}
           {/* TERM 1 & TERM 2 CUSTOM SUB-RECORDS (List -> Click -> Read-Only Preview -> Edit -> Edit/Import) */}
           {(activeTab === 'term1' || activeTab === 'term2') && (() => {
             const termRecs = activeSubject.subRecords

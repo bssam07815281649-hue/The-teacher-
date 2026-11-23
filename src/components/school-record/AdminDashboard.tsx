@@ -159,7 +159,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return () => {
       mounted = false;
     };
-  }, [workspace.school.id, workspace.firebaseSync.lastSyncedAt]);
+  }, [workspace.school.id, workspace.firebaseSync?.lastSyncedAt]);
 
   const syncFingerprint = useMemo(
     () =>
@@ -487,8 +487,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              {workspace.session.ownerEmail || workspace.firebaseSync.linkedEmail
-                ? `حساب الإدارة والحفظ السحابي: ${workspace.session.ownerEmail || workspace.firebaseSync.linkedEmail}${autoSyncLabel ? ` · ${autoSyncLabel}` : ''}`
+              {workspace.session.ownerEmail || workspace.firebaseSync?.linkedEmail
+                ? `حساب الإدارة والحفظ السحابي: ${workspace.session.ownerEmail || workspace.firebaseSync?.linkedEmail}${autoSyncLabel ? ` · ${autoSyncLabel}` : ''}`
                 : 'إدارة ملف المدرسة، الصفوف والشعب، المرشدين والأكواد، سجل التدقيق، والنسخ الاحتياطي والمزامنة السحابية.'}
             </p>
           </div>
@@ -499,7 +499,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             type="button"
             onClick={onOpenFirebaseModal}
             className={`min-h-[40px] px-3.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer ${
-              workspace.firebaseSync.linked && fbReachable !== false
+              workspace.firebaseSync?.linked && fbReachable !== false
                 ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300'
                 : 'bg-[#EEEAFF] dark:bg-slate-800 border-[#653CF5]/30 text-[#4320D9] dark:text-violet-300'
             }`}
@@ -507,7 +507,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {fbReachable ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
             <Cloud className="w-4 h-4" />
             <span>
-              {workspace.firebaseSync.linked ? 'إعدادات Firebase (مربوط)' : 'ربط Firebase (Google)'}
+              {workspace.firebaseSync?.linked ? 'إعدادات Firebase (مربوط)' : 'ربط Firebase (Google)'}
             </span>
           </button>
 

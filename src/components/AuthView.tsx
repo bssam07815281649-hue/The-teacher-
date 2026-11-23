@@ -111,11 +111,11 @@ export function AuthView({
         setMessage(err instanceof Error ? err.message : 'محاولات دخول كثيرة. انتظر قليلاً ثم حاول مجدداً.');
       } else if (status === 401) {
         if (publicData && !publicData.adminCodeConfigured) {
-          setMessage(
-            'لم يتم تعيين كود المدير الأول بعد. إذا كنت مدير المدرسة، اضغط على زر «صفحة الإدارة» أدناه لتعيين كود المدير الخاص بك.'
-          );
+          onSchoolRole('admin', cleanCode);
+          return;
         } else {
-          setMessage('الكود غير صحيح أو تم إبطاله. اضغط «إظهار» لمراجعة الكود المكتوب أو راجع إدارة المدرسة.');
+          setMessage(
+            'الكود غير صحيح أو تم إبطاله. اضغط «إظهار» لمراجعة الكود المكتوب أو راجع إدارة المدرسة.');
         }
       } else {
         setMessage(
@@ -240,6 +240,17 @@ export function AuthView({
           </>
         ) : (
           <>
+            {announcements.length > 0 && (
+            <section className={card + ' space-y-2 p-3'} aria-label="إعلانات المدرسة">
+              <h2 className="flex items-center gap-2 text-sm font-bold"><Megaphone size={20} />إعلانات المدرسة</h2>
+              {announcements.map(item => (
+                <article key={item.id} className="border-t border-violet-200 pt-2 dark:border-slate-700">
+                  <h3 className="font-bold">{item.title}</h3>
+                  <p className="whitespace-pre-line text-sm">{item.body}</p>
+                </article>
+              ))}
+            </section>
+            )}
             {/* Unified School Code Login (Principal / Counselor / Student) */}
             <div className="rounded-2xl border border-violet-200 dark:border-slate-700 bg-violet-50/60 dark:bg-slate-800/50 p-4 space-y-2.5">
 
@@ -277,17 +288,7 @@ export function AuthView({
                 </button>
               </form>
 
-              <div className="pt-1 flex flex-wrap items-center justify-between gap-2 text-xs border-t border-violet-200/70 dark:border-slate-700/70">
 
-                <button
-                  type="button"
-                  onClick={() => onSchoolRole('admin')}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 px-3 py-1.5 font-bold text-white cursor-pointer"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>صفحة الإدارة</span>
-                </button>
-              </div>
 
               {message && (
                 <p role="alert" className="text-xs font-semibold text-rose-700 dark:text-rose-300 pt-1">
@@ -348,16 +349,7 @@ export function AuthView({
                 </article>
               ))}
             </section>
-            <section className={card + ' space-y-2 p-3'} aria-label="إعلانات المدرسة">
-              <h2 className="flex items-center gap-2 text-sm font-bold"><Megaphone size={20} />إعلانات المدرسة</h2>
-              {announcements.map(item => (
-                <article key={item.id} className="border-t border-violet-200 pt-2 dark:border-slate-700">
-                  <h3 className="font-bold">{item.title}</h3>
-                  <p className="whitespace-pre-line text-sm">{item.body}</p>
-                </article>
-              ))}
-              {announcements.length === 0 && <p className="text-sm">لا توجد إعلانات معروضة.</p>}
-            </section>
+
             {/* Quick link to open AI Smart Tutor without code */}
             <a
               href="#tutor"

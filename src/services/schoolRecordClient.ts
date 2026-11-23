@@ -355,6 +355,12 @@ export async function deleteSubjectApi(sectionId: string, subjectId: string): Pr
   await apiRequest(`/sections/${sectionId}/subjects/${subjectId}`, { method: 'DELETE' });
 }
 
+export function releaseGrades(sectionId: string, subjectId: string, period: 'term1' | 'midyear' | 'term2', approve: boolean) {
+  return apiRequest(`/sections/${sectionId}/subjects/${subjectId}/release`, {
+    method: 'POST', body: JSON.stringify({ period, approve }),
+  });
+}
+
 export async function updateGradeCellsApi(
   sectionId: string,
   subjectId: string,

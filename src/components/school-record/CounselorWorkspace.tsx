@@ -395,17 +395,6 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border ${
-              workspace.firebaseSync.linked
-                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900'
-                : 'bg-[#F7F7FC] dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-            }`}
-          >
-            {workspace.firebaseSync.linked ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
-            <span>{workspace.firebaseSync.linked ? 'مرتبط بـ Firebase' : 'العمل المحلي الآمن نشط'}</span>
-          </span>
-
           <button
             type="button"
             onClick={() => void onWorkspaceRefresh()}

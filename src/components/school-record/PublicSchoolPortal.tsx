@@ -34,7 +34,7 @@ export const PublicSchoolPortal: React.FC<PublicSchoolPortalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const { school, stagesCount, sectionsCount, adminCodeConfigured, firebaseSync } = publicData;
+  const { school, stagesCount, sectionsCount, adminCodeConfigured } = publicData;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,20 +74,6 @@ export const PublicSchoolPortal: React.FC<PublicSchoolPortalProps> = ({
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-[#171A36]/80 via-[#171A36]/25 to-transparent" />
-          <div className="absolute top-3 left-3 flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[11px] font-bold backdrop-blur-md border ${
-                firebaseSync.linked && firebaseSync.lastSyncStatus !== 'offline'
-                  ? 'bg-emerald-500/20 text-emerald-50 border-emerald-300/40'
-                  : 'bg-white/15 text-white border-white/25'
-              }`}
-            >
-              {firebaseSync.linked ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
-              <span>
-                {firebaseSync.linked ? 'مربوط بمشروع Firebase' : 'خادم المدرسة المحلي نشط'}
-              </span>
-            </span>
-          </div>
         </div>
 
         <div className="px-5 sm:px-6 pb-6 -mt-10 relative">

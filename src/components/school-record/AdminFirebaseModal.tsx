@@ -203,28 +203,28 @@ export const AdminFirebaseModal: React.FC<AdminFirebaseModalProps> = ({
               <span className="text-slate-500">حالة الربط الإداري:</span>
               <span
                 className={`font-bold inline-flex items-center gap-1 ${
-                  meta.linked ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'
+                  meta?.linked ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'
                 }`}
               >
-                {meta.linked && <CheckCircle2 className="w-3.5 h-3.5" />}
-                {meta.linked ? 'مربوط بحساب Google' : 'غير مربوط بعد'}
+                {meta?.linked && <CheckCircle2 className="w-3.5 h-3.5" />}
+                {meta?.linked ? 'مربوط بحساب Google' : 'غير مربوط بعد'}
               </span>
             </div>
-            {meta.linkedEmail && (
+            {meta?.linkedEmail && (
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">البريد الإداري:</span>
-                <span className="font-mono-num font-semibold text-[#171A36] dark:text-white">{meta.linkedEmail}</span>
+                <span className="font-mono-num font-semibold text-[#171A36] dark:text-white">{meta?.linkedEmail}</span>
               </div>
             )}
-            {meta.lastSyncedAt && (
+            {meta?.lastSyncedAt && (
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">آخر مزامنة:</span>
                 <span className="font-mono-num text-slate-700 dark:text-slate-200">
-                  {new Date(meta.lastSyncedAt).toLocaleString('ar-IQ')}
+                  {new Date(meta?.lastSyncedAt).toLocaleString('ar-IQ')}
                 </span>
               </div>
             )}
-            <p className="text-[11px] text-slate-500 pt-1">{meta.lastSyncMessage}</p>
+            <p className="text-[11px] text-slate-500 pt-1">{meta?.lastSyncMessage}</p>
           </div>
 
           <div className="text-[11px] text-slate-500 dark:text-slate-400 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900 p-3 rounded-xl leading-relaxed">
@@ -239,7 +239,7 @@ export const AdminFirebaseModal: React.FC<AdminFirebaseModalProps> = ({
               className="flex-1 min-h-[44px] px-4 rounded-xl bg-[#653CF5] hover:bg-[#4320D9] text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
             >
               {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cloud className="w-4 h-4" />}
-              <span>{meta.linked ? 'تأكيد Google والمزامنة' : 'ربط حساب Google ومزامنة'}</span>
+              <span>{meta?.linked ? 'تأكيد Google والمزامنة' : 'ربط حساب Google ومزامنة'}</span>
             </button>
 
             <button
@@ -252,7 +252,7 @@ export const AdminFirebaseModal: React.FC<AdminFirebaseModalProps> = ({
               <span>استعادة من Gmail</span>
             </button>
 
-            {meta.linked && (
+            {meta?.linked && (
               <>
                 <button
                   type="button"
