@@ -63,8 +63,15 @@ export function createSchoolRecordRouter(
 
   const requireSchoolSession = (req: SchoolAuthedRequest, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : readSessionCookie(req);
-    const session = store.verifySessionToken(token);
+    const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+    const cookie = readSessionCookie(req);
+    const bearerSession = bearer ? store.verifySessionToken(bearer) : null;
+    const cookieSession = !bearerSession && cookie ? store.verifySessionToken(cookie) : null;
+    const session = bearerSession || cookieSession;
+    if (session && cookie && session.role !== 'admin') {
+      const refreshed = store.renewRememberedSchoolSession(cookie);
+      if (refreshed) res.cookie(sessionCookieName, refreshed, sessionCookieOptions);
+    }
     if (!session) {
       res.status(401).json({ error: 'انتهت الجلسة أو تم تغيير/إبطال الكود. يرجى تسجيل الدخول بالكود مجدداً.' });
       return;
@@ -100,6 +107,7 @@ export function createSchoolRecordRouter(
       const result = await store.loginWithCode(String(code || ''), clientKey);
       // Never store admin code-only sessions persistently.
       if (result.session.role !== 'admin') res.cookie(sessionCookieName, result.token, sessionCookieOptions);
+      else res.clearCookie(sessionCookieName, sessionCookieOptions);
       res.json(result);
     } catch (err) {
       sendError(res, err);
