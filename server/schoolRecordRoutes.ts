@@ -141,6 +141,8 @@ export function createSchoolRecordRouter(
         },
         clientKey
       );
+      // A previously remembered counselor/student session must not survive a manager sign-in.
+      res.clearCookie(sessionCookieName, sessionCookieOptions);
       res.json(result);
     } catch (err) {
       sendError(res, err);
