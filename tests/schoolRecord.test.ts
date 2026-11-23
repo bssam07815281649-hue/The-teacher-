@@ -347,7 +347,7 @@ test('Server security, RBAC scope isolation, session revocation, rate limiting, 
           {
             tempKey: 'k1',
             periodId: 'term1',
-            subRecordName: 'يومي',
+            subRecordName: 'درجات الشهري',
             columnLabel: 'امتحان 1',
             maxScore: 20,
           },

@@ -150,3 +150,13 @@ export function computeStudentSubjectSummary(
     percentageEquivalent,
   };
 }
+
+export function approvedSummary(subject: SubjectGradebook, studentId: string) {
+  const periods = ['term1','midyear','term2'] as const;
+  const grades = periods.map(period => subject.releases?.[period]?.official[studentId] ?? null);
+  const [term1Avg,midyearAvg,term2Avg] = grades;
+  const missingPeriods = periods.filter((_,i)=>grades[i]===null);
+  const annualPursuit = term1Avg!==null && midyearAvg!==null && term2Avg!==null
+    ? Math.round((term1Avg+midyearAvg+term2Avg)*10/3)/10 : null;
+  return {term1Avg,midyearAvg,term2Avg,annualPursuit,isComplete:annualPursuit!==null,missingPeriods};
+}

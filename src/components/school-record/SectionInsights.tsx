@@ -12,7 +12,8 @@ export function Rankings({students,subjects,sections}:{students:SchoolStudent[];
   const ranked = students.flatMap(student => {
     const subjectMeans = subjects.filter(s => s.sectionId === student.sectionId).flatMap(s => {
       if (official) {
-        const grade=s.releases?.[period]?.official[student.id];
+        const release=s.releases?.[period];
+        const grade=release?.approvedColumnIds?.length ? release.official[student.id] : null;
         return grade==null ? [] : [grade];
       }
       const values = getTermColumns(s,period).flatMap(col => {

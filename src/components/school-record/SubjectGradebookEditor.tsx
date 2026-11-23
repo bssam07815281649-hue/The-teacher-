@@ -32,7 +32,7 @@ import type {
   SubjectGradebook,
 } from '../../types';
 import {
-  computeStudentSubjectSummary,
+  approvedSummary,
   formatCellDisplay,
   getCellValue,
   makeCellKey,
@@ -431,7 +431,7 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
           : 'السعي السنوي محسوب بالمتوسط الخام بعد توفر الفترات الثلاث',
       columns: cols.map((c) => ({ label: c.fullLabel, maxScoreLabel: `من ${c.maxScore}` })),
       rows: activeStudents.map((stu) => {
-        const sum = computeStudentSubjectSummary(activeSubject, stu.id);
+        const sum = approvedSummary(activeSubject, stu.id);
         return {
           studentName: stu.fullName,
           cells: cols.map((c) => formatCellDisplay(getCurrentCell(stu.id, c.id))),
@@ -1321,71 +1321,7 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
           {/* ANNUAL PURSUIT */}
           {activeTab === 'pursuit' && (
             <div className="space-y-5">
-              {/* Configuration Card */}
-              <div className="p-4 rounded-2xl bg-[#F7F7FC] dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <Settings2 className="w-5 h-5 text-[#653CF5]" />
-                    <div>
-                      <h4 className="font-display font-bold text-sm sm:text-base text-[#171A36] dark:text-white">
-                        إعدادات احتساب السعي السنوي
-                      </h4>
-                    </div>
-                  </div>
-
-                  <div className="inline-flex rounded-xl bg-white dark:bg-slate-900 p-1 border border-slate-200 dark:border-slate-700">
-                    <button
-                      type="button"
-                      onClick={() => void togglePursuitScale('scale100')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
-                        activeSubject.annualPursuitConfig.scaleMode === 'scale100'
-                          ? 'bg-[#653CF5] text-white'
-                          : 'text-slate-600 dark:text-slate-300'
-                      }`}
-                    >
-                      توحيد المقياس إلى 100
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void togglePursuitScale('raw')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
-                        activeSubject.annualPursuitConfig.scaleMode === 'raw'
-                          ? 'bg-[#653CF5] text-white'
-                          : 'text-slate-600 dark:text-slate-300'
-                      }`}
-                    >
-                      متوسط خام
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                  {/* Term 1 columns */}
-                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-2">
-                    <div className="font-bold text-[#4320D9] dark:text-violet-300">أعمدة الفصل الأول</div>
-                    {activeSubject.subRecords
-                      .filter((r) => r.periodId === 'term1')
-                      .flatMap((r) =>
-                        r.columns.map((c) => ({ ...c, recName: r.name }))
-                      )
-                      .map((c) => {
-                        const checked = activeSubject.annualPursuitConfig.term1ColumnIds.includes(c.id);
-                        return (
-                          <label key={c.id} className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => void togglePursuitColumn('term1', c.id)}
-                              className="accent-[#653CF5]"
-                            />
-                            <span>
-                              {c.recName} — {c.label} (/{c.maxScore})
-                            </span>
-                          </label>
-                        );
-                      })}
-                  </div>
-
+              <details className="rounded-xl border p-3"><summary>أعمدة اعتماد نصف السنة</summary>
                   {/* Midyear columns */}
                   <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-2">
                     <div className="font-bold text-[#4320D9] dark:text-violet-300">أعمدة نصف السنة</div>
@@ -1407,34 +1343,7 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
                     })}
                   </div>
 
-                  {/* Term 2 columns */}
-                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-2">
-                    <div className="font-bold text-[#4320D9] dark:text-violet-300">أعمدة الفصل الثاني</div>
-                    {activeSubject.subRecords
-                      .filter((r) => r.periodId === 'term2')
-                      .flatMap((r) =>
-                        r.columns.map((c) => ({ ...c, recName: r.name }))
-                      )
-                      .map((c) => {
-                        const checked = activeSubject.annualPursuitConfig.term2ColumnIds.includes(c.id);
-                        return (
-                          <label key={c.id} className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => void togglePursuitColumn('term2', c.id)}
-                              className="accent-[#653CF5]"
-                            />
-                            <span>
-                              {c.recName} — {c.label} (/{c.maxScore})
-                            </span>
-                          </label>
-                        );
-                      })}
-                  </div>
-                </div>
-              </div>
-
+              </details>
               {/* Annual Pursuit Summary Table */}
               <div className="overflow-x-auto thin-scrollbar rounded-xl border border-slate-200 dark:border-slate-700">
                 <table className="w-full border-collapse text-xs sm:text-sm">
@@ -1451,7 +1360,7 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
                   </thead>
                   <tbody>
                     {activeStudents.map((stu, idx) => {
-                      const sum = computeStudentSubjectSummary(activeSubject, stu.id);
+                      const sum = approvedSummary(activeSubject, stu.id);
                       return (
                         <tr key={stu.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
                           <td className="p-2.5 border border-slate-200 dark:border-slate-700 text-center font-mono-num">
