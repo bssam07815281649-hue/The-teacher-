@@ -684,7 +684,7 @@ export class SchoolRecordStore {
               sectionId: sec.id,
               sv: sec.counselorCred.sessionVersion,
               iat: Date.now(),
-              exp: Date.now() + 12 * 60 * 60 * 1000,
+              exp: Date.now() + 30 * 24 * 60 * 60 * 1000,
             });
             this.appendAudit(
               tenant,
@@ -730,7 +730,7 @@ export class SchoolRecordStore {
               studentId: student.id,
               sv: student.studentCred.sessionVersion,
               iat: Date.now(),
-              exp: Date.now() + 12 * 60 * 60 * 1000,
+              exp: Date.now() + 30 * 24 * 60 * 60 * 1000,
             });
             this.appendAudit(
               tenant,
