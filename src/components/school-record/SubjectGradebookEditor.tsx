@@ -42,6 +42,7 @@ import {
   updateGradeCellsApi,
   releaseGrades,
   upsertSubjectApi,
+  pendingGradeChanges,
 } from '../../services/schoolRecordClient';
 import { generateMatchingA4Pdf, type A4PdfExportResult } from '../../services/a4PdfExport';
 import { normalizeDigits } from '../../utils/arabicNameMatch';
@@ -378,7 +379,8 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
       await updateGradeCellsApi(section.id, activeSubject.id, updates);
       setDraftCells({});
       await onWorkspaceRefresh();
-      showToast(`تم حفظ ${updates.length} درجة بنجاح.`);
+      const pending = await pendingGradeChanges();
+      showToast(pending ? `حُفظت ${updates.length} درجة على الجهاز. توجد ${pending} مجموعة تعديلات تنتظر المزامنة.` : `تم حفظ ${updates.length} درجة على الخادم بنجاح.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'تعذر حفظ الدرجات.');
     } finally {
