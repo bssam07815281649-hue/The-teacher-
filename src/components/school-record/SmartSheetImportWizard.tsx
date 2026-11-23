@@ -127,6 +127,10 @@ export const SmartSheetImportWizard: React.FC<SmartSheetImportWizardProps> = ({
   const [extracting, setExtracting] = useState(false);
   const [extraction, setExtraction] = useState<ImportExtractionResult | null>(null);
   const [columns, setColumns] = useState<EditableColumnConfig[]>([]);
+  function columnCaption(col: EditableColumnConfig) {
+    const position = columns.findIndex(item => item.columnIndex === col.columnIndex) + 1;
+    return 'العمود ' + position.toLocaleString('ar-IQ') + ' — ' + (col.label.trim() || 'بدون عنوان');
+  }
   const [rows, setRows] = useState<EditableRowState[]>([]);
 
   // Target subject & conflicts & A4 PDF
@@ -1044,7 +1048,7 @@ export const SmartSheetImportWizard: React.FC<SmartSheetImportWizardProps> = ({
                   <th className="p-2.5 border border-slate-700 text-right">الاسم الخام المستخرج</th>
                   {columns.map((col) => (
                     <th key={col.columnIndex} className="p-2.5 border border-slate-700 text-center">
-                      العمود {col.columnIndex} {col.label ? `(${col.label})` : '(بدون عنوان)'}
+                      {columnCaption(col)}
                     </th>
                   ))}
                 </tr>
@@ -1113,7 +1117,7 @@ export const SmartSheetImportWizard: React.FC<SmartSheetImportWizardProps> = ({
               >
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-[#4320D9] dark:text-violet-300">
-                    عمود رقم {col.columnIndex}
+                    {columnCaption(col)}
                   </span>
                   <label className="flex items-center gap-1.5 font-bold cursor-pointer">
                     <input
@@ -1128,7 +1132,7 @@ export const SmartSheetImportWizard: React.FC<SmartSheetImportWizardProps> = ({
                       }
                       className="accent-[#653CF5]"
                     />
-                    <span>تضمين بالترحيل</span>
+                    <span>تضمين بالترحيل<span className="sr-only"> {columnCaption(col)}</span></span>
                   </label>
                 </div>
 
@@ -1215,7 +1219,7 @@ export const SmartSheetImportWizard: React.FC<SmartSheetImportWizardProps> = ({
                   <th className="p-2 border border-slate-700 text-right min-w-[180px]">اسم الطالب</th>
                   {validationState.includedCols.map((col) => (
                     <th key={col.columnIndex} className="p-2 border border-slate-700 text-center min-w-[140px]">
-                      {col.label || `عمود ${col.columnIndex}`} ({col.maxScoreStr || '؟'})
+                      {columnCaption(col)} ({col.maxScoreStr || '؟'})
                     </th>
                   ))}
                   <th className="p-2 border border-slate-700">حذف</th>
