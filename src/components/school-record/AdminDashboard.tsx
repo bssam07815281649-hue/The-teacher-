@@ -845,24 +845,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {activeTab === 'structure' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Stages Column */}
-          <div className="lg:col-span-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
+          <div className="min-w-0 lg:col-span-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
             <h3 className="font-display font-bold text-base text-[#171A36] dark:text-white flex items-center gap-2">
               <Layers className="w-5 h-5 text-[#653CF5]" />
               <span>الصفوف والمراحل (قابلة لإعادة الترتيب)</span>
             </h3>
 
-            <form onSubmit={handleAddStage} className="flex items-center gap-2">
+            <form onSubmit={handleAddStage} className="flex w-full min-w-0 flex-col gap-2.5">
               <input
                 type="text"
                 value={newStageName}
                 onChange={(e) => setNewStageName(e.target.value)}
                 placeholder="اسم الصف (مثال: السادس الإعدادي)..."
-                className="flex-1 min-h-[42px] px-3 rounded-xl bg-[#F7F7FC] dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm"
+                className="w-full min-w-0 min-h-[42px] px-3 rounded-xl bg-[#F7F7FC] dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm"
               />
               <button
                 type="submit"
                 disabled={busy || !newStageName.trim()}
-                className="min-h-[42px] px-4 rounded-xl bg-[#653CF5] hover:bg-[#4320D9] text-white text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                className="w-full min-h-[44px] px-4 rounded-xl bg-[#653CF5] hover:bg-[#4320D9] text-white text-xs font-bold flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
               >
                 <Plus className="w-4 h-4" />
                 <span>إضافة صف</span>
@@ -883,7 +883,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       className="flex-wrap p-3 rounded-xl bg-[#F7F7FC] dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2"
                     >
                       {editingStage?.id === stg.id ? (
-                        <div className="flex-1 flex items-center gap-2">
+                        <div className="w-full min-w-0 flex flex-col sm:flex-row sm:items-center gap-2">
                           <input
                             type="text"
                             value={editingStage.name}
@@ -980,7 +980,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           {/* Sections & Counselors Column */}
-          <div className="lg:col-span-7 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
+          <div className="min-w-0 lg:col-span-7 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
             <h3 className="font-display font-bold text-base text-[#171A36] dark:text-white flex items-center gap-2">
               <Users className="w-5 h-5 text-[#653CF5]" />
               <span>الشعب والمرشدون وإدارة الأكواد</span>
@@ -988,13 +988,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <form
               onSubmit={handleCreateSection}
-              className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 p-3.5 rounded-xl bg-[#F7F7FC] dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700"
+              className="grid w-full min-w-0 grid-cols-1 gap-2.5 p-3.5 rounded-xl bg-[#F7F7FC] dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700"
             >
               <select
                 value={secStageId}
                 onChange={(e) => setSecStageId(e.target.value)}
                 disabled={sortedStages.length === 0}
-                className="sm:col-span-4 min-h-[40px] px-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm"
+                className="w-full min-w-0 min-h-[42px] px-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm"
               >
                 {sortedStages.length === 0 ? (
                   <option value="">أضف صفاً أولاً</option>
@@ -1012,7 +1012,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 value={secName}
                 onChange={(e) => setSecName(e.target.value)}
                 placeholder="اسم الشعبة (مثل: أ)"
-                className="sm:col-span-3 min-h-[40px] px-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm"
+                className="w-full min-w-0 min-h-[42px] px-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm"
               />
 
               <input
@@ -1026,7 +1026,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <button
                 type="submit"
                 disabled={busy || sortedStages.length === 0 || !secName.trim()}
-                className="sm:col-span-2 min-h-[40px] px-3 rounded-xl bg-[#653CF5] hover:bg-[#4320D9] text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+                className="w-full min-h-[44px] px-3 rounded-xl bg-[#653CF5] hover:bg-[#4320D9] text-white text-xs font-bold cursor-pointer disabled:opacity-50"
               >
                 إنشاء شعبة
               </button>
