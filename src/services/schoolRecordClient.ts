@@ -55,6 +55,7 @@ async function apiRequest<T>(path: string, init: RequestInit = {}, authRequired 
   }
 
   const resp = await fetch(`/api/school-record${path}`, {
+    credentials: 'same-origin',
     ...init,
     headers,
   });
@@ -82,8 +83,15 @@ async function apiRequest<T>(path: string, init: RequestInit = {}, authRequired 
       !data?.error && rawText && !rawText.trim().startsWith('<')
         ? ` — ${rawText.trim().slice(0, 140)}`
         : '';
+    const default403Message =
+      path === '/auth/google-admin'
+        ? 'حساب Google هذا غير مخوّل لإدارة المدرسة (403). تأكد من اختيار حساب Google المصرّح به أو المالك المسجّل للمدرسة.'
+        : 'ليس لديك صلاحية كافية لتنفيذ هذه العملية (403).';
     const err = new Error(
-      data?.error || `خطأ في الاتصال بالخادم (${resp.status})${fallbackSnippet}`
+      data?.error ||
+        (resp.status === 403
+          ? default403Message
+          : `خطأ في الاتصال بالخادم (${resp.status})${fallbackSnippet}`)
     ) as Error & {
       status?: number;
       retryAfterSeconds?: number;
@@ -100,8 +108,16 @@ export async function fetchSchoolPublic(): Promise<SchoolPublicPayload> {
   return apiRequest<SchoolPublicPayload>('/public', { method: 'GET' }, false);
 }
 
-export async function loginSchoolWithCode(code: string): Promise<{ token: string; session: SchoolSessionUser }> {
-  const res = await apiRequest<{ token: string; session: SchoolSessionUser }>(
+export async function loginSchoolWithCode(code: string): Promise<{
+  token: string;
+  session: SchoolSessionUser;
+  requiresGoogleAuth?: boolean;
+}> {
+  const res = await apiRequest<{
+    token: string;
+    session: SchoolSessionUser;
+    requiresGoogleAuth?: boolean;
+  }>(
     '/auth/login',
     {
       method: 'POST',
@@ -109,8 +125,12 @@ export async function loginSchoolWithCode(code: string): Promise<{ token: string
     },
     false
   );
-  inMemoryToken = res.token;
-  localStorage.removeItem(MANUAL_SIGNOUT_FLAG);
+  if (res.requiresGoogleAuth || res.session.role === 'admin' || !res.token) {
+    inMemoryToken = null;
+  } else {
+    inMemoryToken = res.token;
+    localStorage.removeItem(MANUAL_SIGNOUT_FLAG);
+  }
   return res;
 }
 
@@ -132,10 +152,12 @@ export async function loginSchoolWithGoogleAdmin(input: {
   return res;
 }
 
-export async function logoutSchoolSession(): Promise<void> {
-  // Keep pending offline marks intact: refuse logout until they reach the server.
-  await clearOfflineSchoolCache();
-  localStorage.setItem(MANUAL_SIGNOUT_FLAG, '1');
+export async function logoutSchoolSession(options?: { isAdmin?: boolean }): Promise<void> {
+  if (!options?.isAdmin) {
+    // Keep pending offline marks intact for counselors/students: refuse logout until synced.
+    await clearOfflineSchoolCache();
+    localStorage.setItem(MANUAL_SIGNOUT_FLAG, '1');
+  }
   try {
     await apiRequest('/auth/logout', { method: 'POST' }, true);
   } catch {
@@ -154,7 +176,7 @@ export async function resumeSchoolSession(): Promise<SchoolSessionUser | null> {
   if (localStorage.getItem(MANUAL_SIGNOUT_FLAG) === '1') {
     if (navigator.onLine) {
       // Clear a same-origin HttpOnly cookie left by an offline manual logout.
-      await fetch('/api/school-record/auth/logout', {method:'POST'}).catch(()=>{});
+      await fetch('/api/school-record/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
     }
     return null;
   }

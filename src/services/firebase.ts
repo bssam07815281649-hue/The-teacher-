@@ -11,6 +11,9 @@ import {
 } from 'firebase/auth';
 import {
   getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   collection,
   doc,
   getDoc,
@@ -42,7 +45,33 @@ import type {
 } from '../types';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+function createFirestoreDb() {
+  try {
+    return initializeFirestore(
+      app,
+      {
+        experimentalForceLongPolling: true,
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
+      },
+      firebaseConfig.firestoreDatabaseId
+    );
+  } catch {
+    try {
+      return initializeFirestore(
+        app,
+        { experimentalForceLongPolling: true },
+        firebaseConfig.firestoreDatabaseId
+      );
+    } catch {
+      return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    }
+  }
+}
+
+export const db = createFirestoreDb();
 export const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('email');
@@ -101,12 +130,31 @@ export function handleFirestoreError(
   throw new Error(JSON.stringify(errInfo));
 }
 
+function isTransientOfflineError(error: unknown): boolean {
+  const code = (error as { code?: string } | null)?.code || '';
+  const msg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    code === 'unavailable' ||
+    msg.includes('the client is offline') ||
+    msg.includes('client is offline') ||
+    msg.includes('could not reach cloud firestore') ||
+    msg.includes('unavailable')
+  );
+}
+
 async function testConnection() {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (retryError) {
+        if (retryError instanceof Error && retryError.message.includes('the client is offline')) {
+          console.error('Please check your Firebase configuration.');
+        }
+      }
     }
   }
 }
@@ -161,23 +209,40 @@ export async function signOutUser() {
 export async function getOrCreateUserProfile(user: User): Promise<UserProfile> {
   const path = `users/${user.uid}`;
   const ref = doc(db, 'users', user.uid);
+  let snap;
   try {
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-      return snap.data() as UserProfile;
+    snap = await getDoc(ref);
+  } catch (firstErr) {
+    if (isTransientOfflineError(firstErr)) {
+      await new Promise((resolve) => setTimeout(resolve, 750));
+      try {
+        snap = await getDoc(ref);
+      } catch (retryErr) {
+        handleFirestoreError(retryErr, OperationType.GET, path);
+      }
+    } else {
+      handleFirestoreError(firstErr, OperationType.GET, path);
     }
-    const profile: UserProfile = {
-      uid: user.uid,
-      displayName: clampStr(user.displayName || 'طالب', 160),
-      email: clampStr(user.email || (user.isAnonymous ? `guest-${user.uid}@anonymous.school.invalid` : ''), 200),
-      photoURL: clampStr(user.photoURL || '', 500),
-      tutorLanguage: 'ar-msa',
-      theme: 'light',
-      fontSize: 18,
-      speechRate: 1.0,
-      voiceName: 'Zephyr',
-      gradeLevel: '',
-    };
+  }
+
+  if (snap && snap.exists()) {
+    return snap.data() as UserProfile;
+  }
+
+  const profile: UserProfile = {
+    uid: user.uid,
+    displayName: clampStr(user.displayName || 'طالب', 160),
+    email: clampStr(user.email || (user.isAnonymous ? `guest-${user.uid}@anonymous.school.invalid` : ''), 200),
+    photoURL: clampStr(user.photoURL || '', 500),
+    tutorLanguage: 'ar-msa',
+    theme: 'light',
+    fontSize: 18,
+    speechRate: 1.0,
+    voiceName: 'Zephyr',
+    gradeLevel: '',
+  };
+
+  try {
     await setDoc(ref, {
       ...profile,
       createdAt: serverTimestamp(),
@@ -185,7 +250,7 @@ export async function getOrCreateUserProfile(user: User): Promise<UserProfile> {
     });
     return profile;
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    handleFirestoreError(error, OperationType.CREATE, path);
   }
 }
 

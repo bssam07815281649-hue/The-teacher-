@@ -200,7 +200,7 @@ export const SchoolGradesTab: React.FC<SchoolGradesTabProps> = ({
   };
 
   const handleSchoolLogout = async () => {
-    await logoutSchoolSession();
+    await logoutSchoolSession({ isAdmin: workspace?.session.role === 'admin' });
     setWorkspace(null);
     setAdminEnteredSectionId(null);
     setShowFirebaseModal(false);

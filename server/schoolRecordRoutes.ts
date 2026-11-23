@@ -49,16 +49,41 @@ export function createSchoolRecordRouter(
   const router = Router();
 
   const sessionCookieName = 'school_record_session';
-  const sessionCookieOptions = {
-    httpOnly: true,
-    sameSite: 'strict' as const,
-    secure: process.env.NODE_ENV === 'production',
-    path: '/api/school-record',
-    maxAge: 30 * 24 * 60 * 60 * 1000,
+  const getCookieBaseOptions = (req: Request) => {
+    const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+    const isHttps = req.secure || forwardedProto === 'https';
+    return {
+      httpOnly: true,
+      sameSite: (isHttps ? 'none' : 'lax') as 'none' | 'lax',
+      secure: isHttps,
+      ...(isHttps ? { partitioned: true } : {}),
+      path: '/api/school-record',
+    };
   };
+  const getCookieSetOptions = (req: Request) => ({
+    ...getCookieBaseOptions(req),
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  });
   const readSessionCookie = (req: Request) => {
     const cookie = (req.headers.cookie || '').split('; ').find(c => c.startsWith(sessionCookieName + '='));
     return cookie ? decodeURIComponent(cookie.slice(sessionCookieName.length + 1)) : '';
+  };
+
+  const isSameOriginCookieMutation = (req: Request): boolean => {
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method.toUpperCase())) return true;
+    const rawOrigin = String(req.headers.origin || req.headers.referer || '').trim();
+    if (!rawOrigin) return true;
+    const expectedHost = String(req.headers['x-forwarded-host'] || req.headers.host || '')
+      .split(',')[0]
+      .trim()
+      .toLowerCase();
+    if (!expectedHost) return true;
+    try {
+      const parsed = new URL(rawOrigin);
+      return parsed.host.toLowerCase() === expectedHost;
+    } catch {
+      return false;
+    }
   };
 
   const requireSchoolSession = (req: SchoolAuthedRequest, res: Response, next: NextFunction) => {
@@ -67,10 +92,14 @@ export function createSchoolRecordRouter(
     const cookie = readSessionCookie(req);
     const bearerSession = bearer ? store.verifySessionToken(bearer) : null;
     const cookieSession = !bearerSession && cookie ? store.verifySessionToken(cookie) : null;
+    if (!bearerSession && cookieSession && !isSameOriginCookieMutation(req)) {
+      res.status(403).json({ error: 'تم رفض الطلب لعدم تطابق مصدر الجلسة.' });
+      return;
+    }
     const session = bearerSession || cookieSession;
-    if (session && cookie && session.role !== 'admin') {
+    if (session && !bearerSession && cookie && session.role !== 'admin') {
       const refreshed = store.renewRememberedSchoolSession(cookie);
-      if (refreshed) res.cookie(sessionCookieName, refreshed, sessionCookieOptions);
+      if (refreshed) res.cookie(sessionCookieName, refreshed, getCookieSetOptions(req));
     }
     if (!session) {
       res.status(401).json({ error: 'انتهت الجلسة أو تم تغيير/إبطال الكود. يرجى تسجيل الدخول بالكود مجدداً.' });
@@ -105,9 +134,12 @@ export function createSchoolRecordRouter(
       const { code } = (req.body || {}) as { code?: string };
       const clientKey = String(req.ip || req.socket.remoteAddress || 'unknown');
       const result = await store.loginWithCode(String(code || ''), clientKey);
-      // Never store admin code-only sessions persistently.
-      if (result.session.role !== 'admin') res.cookie(sessionCookieName, result.token, sessionCookieOptions);
-      else res.clearCookie(sessionCookieName, sessionCookieOptions);
+      // Never issue or store admin sessions from code-only login.
+      if (result.session.role !== 'admin' && result.token && !result.requiresGoogleAuth) {
+        res.cookie(sessionCookieName, result.token, getCookieSetOptions(req));
+      } else {
+        res.clearCookie(sessionCookieName, getCookieBaseOptions(req));
+      }
       res.json(result);
     } catch (err) {
       sendError(res, err);
@@ -141,8 +173,8 @@ export function createSchoolRecordRouter(
         },
         clientKey
       );
-      // A previously remembered counselor/student session must not survive a manager sign-in.
-      res.clearCookie(sessionCookieName, sessionCookieOptions);
+      // A previously remembered counselor/student cookie must not override an active manager session in this browser.
+      res.clearCookie(sessionCookieName, getCookieBaseOptions(req));
       res.json(result);
     } catch (err) {
       sendError(res, err);
@@ -151,8 +183,15 @@ export function createSchoolRecordRouter(
 
   router.post('/auth/logout', (req: SchoolAuthedRequest, res) => {
     try {
-      res.clearCookie(sessionCookieName, sessionCookieOptions);
-      const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : readSessionCookie(req);
+      const authHeader = req.headers.authorization || '';
+      const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+      const cookie = readSessionCookie(req);
+      if (!bearer && cookie && !isSameOriginCookieMutation(req)) {
+        res.status(403).json({ error: 'تم رفض الطلب لعدم تطابق مصدر الجلسة.' });
+        return;
+      }
+      res.clearCookie(sessionCookieName, getCookieBaseOptions(req));
+      const token = bearer || cookie;
       const session = store.verifySessionToken(token);
       if (session) store.recordLogout(session);
       res.json({ ok: true });

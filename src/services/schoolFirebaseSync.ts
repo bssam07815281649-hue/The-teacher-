@@ -113,15 +113,22 @@ export async function syncWorkspaceToFirestore(
     throw new Error('يرجى تسجيل الدخول بحساب Google داخل إعدادات Firebase للمدير أولاً.');
   }
 
-  const schoolId = makeSchoolIdForUid(user.uid);
+  const schoolId = (workspace.school.id || 'default_school').trim() || 'default_school';
   const schoolRef = doc(db, 'schools', schoolId);
   let existingCreatedAt: unknown = null;
   try {
     const snap = await getDocFromServer(schoolRef);
     if (snap.exists()) {
-      existingCreatedAt = snap.data().createdAt || null;
+      const existingData = snap.data();
+      if (existingData.ownerUid && existingData.ownerUid !== user.uid) {
+        throw new Error('هذه المدرسة محفوظة مسبقاً في Firestore على حساب Google آخر.');
+      }
+      existingCreatedAt = existingData.createdAt || null;
     }
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('حساب Google آخر')) {
+      throw err;
+    }
     // Proceed cleanly for new school creation
   }
 
@@ -391,21 +398,31 @@ export async function restoreWorkspaceFromFirestore(schoolId?: string): Promise<
   const user = auth.currentUser;
   if (!user) return null;
 
-  const targetSchoolId = schoolId || makeSchoolIdForUid(user.uid);
-  const schoolSnap = await getDocFromServer(doc(db, 'schools', targetSchoolId));
+  const primaryId = (schoolId || 'default_school').trim() || 'default_school';
+  const legacyUidId = makeSchoolIdForUid(user.uid);
+  let targetSchoolId = primaryId;
+  let schoolSnap = await getDocFromServer(doc(db, 'schools', targetSchoolId));
+  if (!schoolSnap.exists() && legacyUidId !== primaryId) {
+    const legacySnap = await getDocFromServer(doc(db, 'schools', legacyUidId));
+    if (legacySnap.exists()) {
+      targetSchoolId = legacyUidId;
+      schoolSnap = legacySnap;
+    }
+  }
   if (!schoolSnap.exists()) {
     return null;
   }
 
   const sData = schoolSnap.data();
+  const queryOwnerUid = String(sData.ownerUid || user.uid);
   const [annsMap, stagesMap, secsMap, studentsMap, absencesMap, subjectsMap, templatesMap] = await Promise.all([
-    fetchOwnerDocsMap(targetSchoolId, 'announcements', user.uid),
-    fetchOwnerDocsMap(targetSchoolId, 'stages', user.uid),
-    fetchOwnerDocsMap(targetSchoolId, 'sections', user.uid),
-    fetchOwnerDocsMap(targetSchoolId, 'students', user.uid),
-    fetchOwnerDocsMap(targetSchoolId, 'absences', user.uid),
-    fetchOwnerDocsMap(targetSchoolId, 'subjects', user.uid),
-    fetchOwnerDocsMap(targetSchoolId, 'templates', user.uid),
+    fetchOwnerDocsMap(targetSchoolId, 'announcements', queryOwnerUid),
+    fetchOwnerDocsMap(targetSchoolId, 'stages', queryOwnerUid),
+    fetchOwnerDocsMap(targetSchoolId, 'sections', queryOwnerUid),
+    fetchOwnerDocsMap(targetSchoolId, 'students', queryOwnerUid),
+    fetchOwnerDocsMap(targetSchoolId, 'absences', queryOwnerUid),
+    fetchOwnerDocsMap(targetSchoolId, 'subjects', queryOwnerUid),
+    fetchOwnerDocsMap(targetSchoolId, 'templates', queryOwnerUid),
   ]);
 
   const announcements: SchoolAnnouncement[] = Array.from(annsMap.values()).map((d) => ({

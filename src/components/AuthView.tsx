@@ -99,7 +99,7 @@ export function AuthView({
     try {
       const res = await loginSchoolWithCode(cleanCode);
       setCode('');
-      if (res.session.role === 'admin') {
+      if (res.requiresGoogleAuth || res.session.role === 'admin') {
         clearSchoolSessionToken();
         onSchoolRole('admin', cleanCode);
       } else {
@@ -138,6 +138,15 @@ export function AuthView({
     setMessage('');
     setGuestBusy(true);
     try {
+      if (auth.currentUser) {
+        setPending(section);
+        if (onRetryProfile) {
+          await onRetryProfile();
+        } else {
+          onEnterGuest(section);
+        }
+        return;
+      }
       // Try anonymous Firebase session first for cloud backup if enabled;
       // otherwise seamlessly enter Local Guest Mode so AI Smart Tutor opens with zero login/code!
       setPending(section);

@@ -230,6 +230,39 @@ export default function App() {
     setTimeout(() => setToastMsg((prev) => (prev === msg ? null : prev)), 3500);
   }, []);
 
+  const buildOfflineFallbackProfile = useCallback((user: User): UserProfile => {
+    const cacheKey = `smart_tutor_profile_${user.uid}`;
+    try {
+      const raw = localStorage.getItem(cacheKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as UserProfile;
+        if (parsed && parsed.uid === user.uid) return parsed;
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return {
+      uid: user.uid,
+      displayName: user.displayName || 'طالب',
+      email: user.email || '',
+      photoURL: user.photoURL || '',
+      tutorLanguage: 'ar-msa',
+      theme: 'light',
+      fontSize: 18,
+      speechRate: 1.0,
+      voiceName: 'Zephyr',
+      gradeLevel: '',
+    };
+  }, []);
+
+  const cacheUserProfileLocally = useCallback((prof: UserProfile) => {
+    try {
+      localStorage.setItem(`smart_tutor_profile_${prof.uid}`, JSON.stringify(prof));
+    } catch {
+      // Ignore quota errors
+    }
+  }, []);
+
   // Auth listener
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -239,11 +272,16 @@ export default function App() {
         setGuestMode(false);
         try {
           const prof = await loadOrCreateProfile(user);
+          cacheUserProfileLocally(prof);
           setProfile(prof);
         } catch (err) {
-          console.error(err);
-          setProfile(null);
-          setProfileError('تم تسجيل الدخول، لكن تعذّر تحميل بيانات حسابك. تحقق من الاتصال أو صلاحيات Firebase ثم أعد المحاولة.');
+          const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+          if (msg.includes('client is offline') || msg.includes('unavailable')) {
+            setProfile(buildOfflineFallbackProfile(user));
+          } else {
+            setProfile(null);
+            setProfileError('تم تسجيل الدخول، لكن تعذّر تحميل بيانات حسابك. تحقق من الاتصال أو صلاحيات Firebase ثم أعد المحاولة.');
+          }
         }
       } else {
         setProfile(null);
@@ -258,7 +296,7 @@ export default function App() {
       setAuthReady(true);
     });
     return () => unsub();
-  }, []);
+  }, [buildOfflineFallbackProfile, cacheUserProfileLocally]);
 
   // Recover signed, revocable counselor/student sessions without a second code entry.
   useEffect(() => {
@@ -311,12 +349,12 @@ export default function App() {
 
   const handleSchoolLogout = useCallback(async () => {
     try { await logoutSchoolSession(); }
-    catch (error) { window.alert(error instanceof Error ? error.message : 'تعذر تسجيل الخروج قبل مزامنة التعديلات المحلية.'); return; }
+    catch (error) { showToast(error instanceof Error ? error.message : 'تعذر تسجيل الخروج قبل مزامنة التعديلات المحلية.'); return; }
     clearSchoolSessionToken();
     setSchoolWorkspace(null);
     setSchoolRole(null);
     setPortalOpen(true);
-  }, []);
+  }, [showToast]);
 
   const retryProfileLoad = useCallback(async () => {
     const user = auth.currentUser;
@@ -324,12 +362,17 @@ export default function App() {
     setProfileError('');
     try {
       const loaded = await loadOrCreateProfile(user);
+      cacheUserProfileLocally(loaded);
       setProfile(loaded);
     } catch (err) {
-      console.error(err);
-      setProfileError('تعذّر تحميل حسابك مرة أخرى. تحقق من الاتصال وصلاحيات Firebase.');
+      const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+      if (msg.includes('client is offline') || msg.includes('unavailable')) {
+        setProfile(buildOfflineFallbackProfile(user));
+      } else {
+        setProfileError('تعذّر تحميل حسابك مرة أخرى. تحقق من الاتصال وصلاحيات Firebase.');
+      }
     }
-  }, []);
+  }, [buildOfflineFallbackProfile, cacheUserProfileLocally]);
 
   // Theme sync on <html>
   useEffect(() => {
@@ -2581,8 +2624,13 @@ ${schoolGradesSummary.summaryText ? `- مستوى الطالب في سجل در�
         onClose={() => setSettingsOpen(false)}
         profile={profile}
         onUpdateProfile={async (updates) => {
-          setProfile((prev) => (prev ? { ...prev, ...updates } : prev));
-          await saveUserProfile(activeUid, updates);
+          setProfile((prev) => {
+            if (!prev) return prev;
+            const next = { ...prev, ...updates };
+            cacheUserProfileLocally(next);
+            return next;
+          });
+          await saveUserProfile(activeUid, updates).catch(() => {});
           showToast('تم حفظ الإعدادات.');
         }}
         onSignOut={async () => {

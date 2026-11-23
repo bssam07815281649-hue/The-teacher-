@@ -55,7 +55,6 @@ import {
 } from '../../services/schoolRecordClient';
 import { auth } from '../../services/firebase';
 import {
-  makeSchoolIdForUid,
   syncWorkspaceToFirestore,
   testFirestoreConnectivity,
 } from '../../services/schoolFirebaseSync';
@@ -196,7 +195,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   useEffect(() => {
     const user = auth.currentUser;
     if (!user || user.isAnonymous || !user.emailVerified) return;
-    if (workspace.school.id !== makeSchoolIdForUid(user.uid)) return;
+    if (!workspace.firebaseSync?.linked) return;
+    const expectedEmail = (workspace.session.ownerEmail || workspace.firebaseSync.linkedEmail || '').trim().toLowerCase();
+    const userEmail = (user.email || '').trim().toLowerCase();
+    if (expectedEmail && userEmail !== expectedEmail) return;
     if (syncFingerprint === lastSyncFingerprintRef.current) return;
 
     const timer = window.setTimeout(() => {

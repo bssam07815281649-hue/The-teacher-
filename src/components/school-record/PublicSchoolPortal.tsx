@@ -48,9 +48,13 @@ export const PublicSchoolPortal: React.FC<PublicSchoolPortalProps> = ({
     try {
       const res = await loginSchoolWithCode(cleanCode);
       setCode('');
-      if (res.session.role === 'admin' && onAdminGoogleLogin) {
+      if (res.requiresGoogleAuth || res.session.role === 'admin') {
         clearSchoolSessionToken();
-        onAdminGoogleLogin(cleanCode);
+        if (onAdminGoogleLogin) {
+          onAdminGoogleLogin(cleanCode);
+        } else {
+          setError('دخول المدير يتطلب التحقق من حساب Google المصرح به.');
+        }
         return;
       }
       onLoginSuccess(res.session);

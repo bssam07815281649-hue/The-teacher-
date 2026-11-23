@@ -246,10 +246,15 @@ export function AdminGate({
         if (mountedRef.current) {
           setWorkspace(null);
           setAccess('form');
-          setError(
+          const status = (err as { status?: number } | null)?.status;
+          const baseMsg =
             err instanceof Error && err.message
               ? err.message
-              : 'تعذّر التحقق من كود المدير أو حساب Google.'
+              : 'تعذّر التحقق من كود المدير أو حساب Google.';
+          setError(
+            status === 403 && user.email && !baseMsg.includes(user.email)
+              ? `${baseMsg} (الحساب المستخدم: ${user.email})`
+              : baseMsg
           );
         }
       } finally {
@@ -399,7 +404,7 @@ export function AdminGate({
   }
 
   async function handleAdminLogout() {
-    await logoutSchoolSession();
+    await logoutSchoolSession({ isAdmin: true });
     setWorkspace(null);
     setActiveSectionId(null);
     setAccess('form');

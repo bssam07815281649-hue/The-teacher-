@@ -48,17 +48,40 @@ async function startTestServer(
 async function apiJson(
   baseUrl: string,
   route: string,
-  options: { method?: string; token?: string; body?: unknown; ipHeader?: string } = {}
-): Promise<{ status: number; data: any }> {
+  options: {
+    method?: string;
+    token?: string;
+    cookie?: string;
+    origin?: string;
+    body?: unknown;
+  } = {}
+): Promise<{ status: number; data: any; cookies: string[] }> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (options.token) headers['Authorization'] = `Bearer ${options.token}`;
+  if (options.cookie) headers['Cookie'] = options.cookie;
+  if (options.origin) headers['Origin'] = options.origin;
   const resp = await fetch(`${baseUrl}${route}`, {
     method: options.method || 'GET',
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
   const data = await resp.json().catch(() => ({}));
-  return { status: resp.status, data };
+  const rawSetCookies = typeof resp.headers.getSetCookie === 'function'
+    ? resp.headers.getSetCookie()
+    : resp.headers.get('set-cookie')
+    ? [resp.headers.get('set-cookie')!]
+    : [];
+  return { status: resp.status, data, cookies: rawSetCookies };
+}
+
+function extractSessionCookie(cookies: string[]): string {
+  for (const c of cookies) {
+    const first = c.split(';')[0] || '';
+    if (first.startsWith('school_record_session=') && first.length > 'school_record_session='.length) {
+      return first;
+    }
+  }
+  return '';
 }
 
 test('Arabic normalization, digits conversion, cell parsing & 70% matching rules', () => {
@@ -166,10 +189,24 @@ test('Annual pursuit strict 3-period rule, scale100 vs raw, and numeric zero vs 
 
 test('Server security, RBAC scope isolation, session revocation, rate limiting, rollback, and sanitized backups', async () => {
   const prevAdminEnv = process.env.SCHOOL_ADMIN_CODE;
+  const prevEmailEnv = process.env.SCHOOL_ADMIN_EMAIL;
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-record-test-'));
   delete process.env.SCHOOL_ADMIN_CODE;
+  process.env.SCHOOL_ADMIN_EMAIL = 'bssam07815281649@gmail.com';
 
-  const { baseUrl, close } = await startTestServer(tempDir);
+  const mockAdminVerifier = async (token: string) => {
+    if (token === 'token_admin_ok') {
+      return {
+        uid: 'uid_bssam',
+        email: 'bssam07815281649@gmail.com',
+        emailVerified: true,
+        displayName: 'مدير المدرسة',
+      };
+    }
+    return null;
+  };
+
+  const { baseUrl, close } = await startTestServer(tempDir, mockAdminVerifier);
 
   try {
     // 1. Public check reports adminCodeConfigured = false when env unset (zero default code fallback!)
@@ -184,18 +221,30 @@ test('Server security, RBAC scope isolation, session revocation, rate limiting, 
     });
     assert.equal(badDefault.status, 401);
 
-    // 2. Configure synthetic admin secret via process.env and login
+    // 2. Configure synthetic admin secret via process.env: code-only login opens Google gate WITHOUT issuing an admin token
     process.env.SCHOOL_ADMIN_CODE = 'TEST_ADM_SECRET_991';
     const pub2 = await apiJson(baseUrl, '/public');
     assert.equal(pub2.data.adminCodeConfigured, true);
 
-    const adminLogin = await apiJson(baseUrl, '/auth/login', {
+    const codeOnlyAdmin = await apiJson(baseUrl, '/auth/login', {
       method: 'POST',
       body: { code: 'TEST_ADM_SECRET_991' },
+    });
+    assert.equal(codeOnlyAdmin.status, 200);
+    assert.equal(codeOnlyAdmin.data.session.role, 'admin');
+    assert.equal(codeOnlyAdmin.data.requiresGoogleAuth, true);
+    assert.equal(codeOnlyAdmin.data.token, '');
+    assert.equal(extractSessionCookie(codeOnlyAdmin.cookies), '');
+
+    // Complete verified Google Admin authentication to receive admin token
+    const adminLogin = await apiJson(baseUrl, '/auth/google-admin', {
+      method: 'POST',
+      body: { idToken: 'token_admin_ok', code: 'TEST_ADM_SECRET_991' },
     });
     assert.equal(adminLogin.status, 200);
     assert.equal(adminLogin.data.session.role, 'admin');
     const adminToken = adminLogin.data.token as string;
+    assert.ok(adminToken.length > 20);
 
     // 3. Admin creates Stage & Sections A, B and issues counselor codes
     const stgRes = await apiJson(baseUrl, '/stages', {
@@ -507,10 +556,15 @@ test('Server security, RBAC scope isolation, session revocation, rate limiting, 
     } else {
       delete process.env.SCHOOL_ADMIN_CODE;
     }
+    if (prevEmailEnv !== undefined) {
+      process.env.SCHOOL_ADMIN_EMAIL = prevEmailEnv;
+    } else {
+      delete process.env.SCHOOL_ADMIN_EMAIL;
+    }
   }
 });
 
-test('Multi-tenant Google Admin requires valid Principal Code, isolates schools per Gmail, and supports code-only counselors', async () => {
+test('Stable canonical schoolId ownership, Google-verified Admin gate, admin logout independence, and cross-device sync', async () => {
   const prevAdminEnv = process.env.SCHOOL_ADMIN_CODE;
   const prevEmailEnv = process.env.SCHOOL_ADMIN_EMAIL;
   delete process.env.SCHOOL_ADMIN_CODE;
@@ -564,14 +618,14 @@ test('Multi-tenant Google Admin requires valid Principal Code, isolates schools 
     });
     assert.equal(shortInit.status, 400);
 
-    // 4. Verified Gmail A sets initial Principal Code atomically and enters isolated school_uid_bssam
+    // 4. Verified Gmail A sets initial Principal Code and claims the single stable canonical schoolId ('default_school')
     const okResA = await apiJson(baseUrl, '/auth/google-admin', {
       method: 'POST',
       body: { idToken: 'token_principal_a', initialCode: 'BOSS_CODE_2026' },
     });
     assert.equal(okResA.status, 200);
     assert.equal(okResA.data.session.role, 'admin');
-    assert.equal(okResA.data.session.schoolId, 'school_uid_bssam');
+    assert.equal(okResA.data.session.schoolId, 'default_school');
     assert.equal(okResA.data.session.ownerEmail, 'bssam07815281649@gmail.com');
     assert.equal(okResA.data.isNewSchool, true);
     const tokenA = okResA.data.token as string;
@@ -580,97 +634,389 @@ test('Multi-tenant Google Admin requires valid Principal Code, isolates schools 
     const pub = await apiJson(baseUrl, '/public');
     assert.equal(pub.data.adminCodeConfigured, true);
 
-    // 6. Any other verified Gmail B is rejected WITHOUT the valid Principal Code
-    const missingCodeB = await apiJson(baseUrl, '/auth/google-admin', {
-      method: 'POST',
-      body: { idToken: 'token_principal_b' },
-    });
-    assert.equal(missingCodeB.status, 401);
-
-    const wrongCodeB = await apiJson(baseUrl, '/auth/google-admin', {
-      method: 'POST',
-      body: { idToken: 'token_principal_b', code: 'WRONG_ADMIN_CODE' },
-    });
-    assert.equal(wrongCodeB.status, 401);
-
-    // 7. Verified Gmail B succeeds WITH valid Principal Code and gets its own isolated school
-    const okResB = await apiJson(baseUrl, '/auth/google-admin', {
+    // 6. Unauthorized Gmail B is ALWAYS rejected with 403 even if they possess the Principal Code
+    const unauthorizedB = await apiJson(baseUrl, '/auth/google-admin', {
       method: 'POST',
       body: { idToken: 'token_principal_b', code: 'BOSS_CODE_2026' },
     });
-    assert.equal(okResB.status, 200);
-    assert.equal(okResB.data.session.schoolId, 'school_uid_other');
-    assert.equal(okResB.data.session.ownerEmail, 'otherprincipal@gmail.com');
-    const tokenB = okResB.data.token as string;
+    assert.equal(unauthorizedB.status, 403);
 
-    // 8. Data created under Gmail A is strictly isolated from Gmail B
+    // 7. Same authorized Gmail signing in on Device 2 gets the EXACT same stable schoolId (no duplicate DB)
+    const device2Res = await apiJson(baseUrl, '/auth/google-admin', {
+      method: 'POST',
+      body: { idToken: 'token_principal_a', code: 'BOSS_CODE_2026' },
+    });
+    assert.equal(device2Res.status, 200);
+    assert.equal(device2Res.data.session.schoolId, 'default_school');
+    assert.equal(device2Res.data.isNewSchool, false);
+
+    // 8. Admin creates school profile, stage, section, student, subject, and codes on stable schoolId
     await apiJson(baseUrl, '/school', {
       method: 'PUT',
       token: tokenA,
-      body: { name: 'مدرسة بسام الخاصة' },
+      body: { name: 'مدرسة بسام الموحدة' },
     });
     const stgA = await apiJson(baseUrl, '/stages', {
       method: 'POST',
       token: tokenA,
-      body: { name: 'صف مدرسة بسام' },
+      body: { name: 'الصف السادس الإعدادي' },
     });
     const secA = await apiJson(baseUrl, '/sections', {
       method: 'POST',
       token: tokenA,
       body: { stageId: stgA.data.stage.id, name: 'أ', counselorName: 'مرشد بسام' },
     });
-    await apiJson(baseUrl, `/sections/${secA.data.section.id}/counselor-code`, {
+    const sectionId = secA.data.section.id as string;
+    await apiJson(baseUrl, `/sections/${sectionId}/counselor-code`, {
       method: 'POST',
       token: tokenA,
       body: { action: 'issue', code: 'GMAIL_A_CSL_11' },
     });
+    const stuRes = await apiJson(baseUrl, `/sections/${sectionId}/students`, {
+      method: 'POST',
+      token: tokenA,
+      body: { fullName: 'علي حسين كريم', status: 'active' },
+    });
+    const studentId = stuRes.data.student.id as string;
+    await apiJson(baseUrl, `/sections/${sectionId}/students/${studentId}/code`, {
+      method: 'POST',
+      token: tokenA,
+      body: { action: 'issue', code: 'STU_ALI_7788' },
+    });
+    const subjRes = await apiJson(baseUrl, `/sections/${sectionId}/subjects`, {
+      method: 'POST',
+      token: tokenA,
+      body: { name: 'الأحياء' },
+    });
+    const subjectObj = subjRes.data.subject;
+    const term1ColId = subjectObj.subRecords[0].columns[0].id as string;
 
-    const wsA = await apiJson(baseUrl, '/workspace', { token: tokenA });
-    assert.equal(wsA.data.school.name, 'مدرسة بسام الخاصة');
-    assert.equal(wsA.data.stages.length, 1);
+    // 9. Admin explicitly logs out -> database, counselor codes, and student codes MUST keep working normally!
+    const adminLogout = await apiJson(baseUrl, '/auth/logout', {
+      method: 'POST',
+      token: tokenA,
+    });
+    assert.equal(adminLogout.status, 200);
 
-    const wsB = await apiJson(baseUrl, '/workspace', { token: tokenB });
-    assert.notEqual(wsB.data.school.name, 'مدرسة بسام الخاصة');
-    assert.equal(wsB.data.stages.length, 0);
+    // Public portal remains available with updated school profile
+    const pubAfterLogout = await apiJson(baseUrl, '/public');
+    assert.equal(pubAfterLogout.status, 200);
+    assert.equal(pubAfterLogout.data.school.name, 'مدرسة بسام الموحدة');
 
-    // 9. Counselor issued inside Gmail A's school logs in by code ONLY (no Google) into school_uid_bssam
+    // 10. Device 2 (Counselor) logs in using code ONLY while Admin is completely signed out
     const cslLogin = await apiJson(baseUrl, '/auth/login', {
       method: 'POST',
       body: { code: 'GMAIL_A_CSL_11' },
     });
     assert.equal(cslLogin.status, 200);
     assert.equal(cslLogin.data.session.role, 'counselor');
-    assert.equal(cslLogin.data.session.schoolId, 'school_uid_bssam');
+    assert.equal(cslLogin.data.session.schoolId, 'default_school');
+    const cslCookie = extractSessionCookie(cslLogin.cookies);
+    assert.ok(cslCookie.startsWith('school_record_session='), 'Counselor must receive remembered HttpOnly cookie');
 
-    // 10. Rotating admin code invalidates previous admin sessions immediately
+    // Counselor resumes session via HttpOnly cookie alone (simulated page reload on Device 2)
+    const cslResume = await apiJson(baseUrl, '/auth/me', {
+      cookie: cslCookie,
+    });
+    assert.equal(cslResume.status, 200);
+    assert.equal(cslResume.data.session.role, 'counselor');
+    assert.equal(cslResume.data.session.sectionId, sectionId);
+
+    // Cross-site CSRF origin check rejects cookie-authenticated mutation from foreign Origin
+    const csrfBlocked = await apiJson(baseUrl, `/sections/${sectionId}/subjects/${subjectObj.id}/cells`, {
+      method: 'POST',
+      cookie: cslCookie,
+      origin: 'https://evil-attacker.example',
+      body: {
+        updates: [{ studentId, columnId: term1ColId, value: { status: 'score', score: 95 } }],
+      },
+    });
+    assert.equal(csrfBlocked.status, 403);
+
+    // Same-origin counselor grade edit saves centrally using cookie session while admin is signed out
+    const sameHostOrigin = new URL(baseUrl).origin;
+    const cslGradeSave = await apiJson(baseUrl, `/sections/${sectionId}/subjects/${subjectObj.id}/cells`, {
+      method: 'POST',
+      cookie: cslCookie,
+      origin: sameHostOrigin,
+      body: {
+        updates: [{ studentId, columnId: term1ColId, value: { status: 'score', score: 92 } }],
+      },
+    });
+    assert.equal(cslGradeSave.status, 200);
+
+    // 11. Device 3 (Student) logs in by code ONLY while Admin is signed out and sees counselor's synced grade read-only
+    const stuLogin = await apiJson(baseUrl, '/auth/login', {
+      method: 'POST',
+      body: { code: 'STU_ALI_7788' },
+    });
+    assert.equal(stuLogin.status, 200);
+    assert.equal(stuLogin.data.session.role, 'student');
+    assert.equal(stuLogin.data.session.schoolId, 'default_school');
+    const stuCookie = extractSessionCookie(stuLogin.cookies);
+    assert.ok(stuCookie.startsWith('school_record_session='));
+
+    const stuReport = await apiJson(baseUrl, '/my-record', { cookie: stuCookie });
+    assert.equal(stuReport.status, 200);
+    assert.equal(stuReport.data.subjects[0].cells[`${studentId}::${term1ColId}`]?.score, 92);
+
+    // 12. Admin logs back in (code + verified Google) and sees counselor's edit on the exact same canonical school
+    const adminRelogin = await apiJson(baseUrl, '/auth/google-admin', {
+      method: 'POST',
+      body: { idToken: 'token_principal_a', code: 'BOSS_CODE_2026' },
+    });
+    assert.equal(adminRelogin.status, 200);
+    const adminWs = await apiJson(baseUrl, '/workspace', { token: adminRelogin.data.token });
+    assert.equal(adminWs.status, 200);
+    assert.equal(adminWs.data.school.id, 'default_school');
+    assert.equal(adminWs.data.subjects[0].cells[`${studentId}::${term1ColId}`]?.score, 92);
+
+    // 13. Rotating admin code invalidates previous admin sessions, and /auth/login returns requiresGoogleAuth (NO token!)
     const setCodeRes = await apiJson(baseUrl, '/admin/code', {
       method: 'PUT',
-      token: tokenA,
+      token: adminRelogin.data.token,
       body: { newCode: 'NEW_BOSS_2027' },
     });
     assert.equal(setCodeRes.status, 200);
 
-    const oldCheck = await apiJson(baseUrl, '/workspace', { token: tokenA });
+    const oldCheck = await apiJson(baseUrl, '/workspace', { token: adminRelogin.data.token });
     assert.equal(oldCheck.status, 401);
 
+    // Code-only admin login NEVER issues a token; must route through Google Admin verification
     const codeLogin = await apiJson(baseUrl, '/auth/login', {
       method: 'POST',
       body: { code: 'NEW_BOSS_2027' },
     });
     assert.equal(codeLogin.status, 200);
     assert.equal(codeLogin.data.session.role, 'admin');
+    assert.equal(codeLogin.data.requiresGoogleAuth, true);
+    assert.equal(codeLogin.data.token, '');
 
-    // Arabic-Indic digits + invisible directional mark also verify cleanly
+    // Arabic-Indic digits + invisible directional mark also verify at Admin gate
     const arabicDigitLogin = await apiJson(baseUrl, '/auth/login', {
       method: 'POST',
       body: { code: '\u200fNEW_BOSS_٢٠٢٧ ' },
     });
     assert.equal(arabicDigitLogin.status, 200);
     assert.equal(arabicDigitLogin.data.session.role, 'admin');
+    assert.equal(arabicDigitLogin.data.requiresGoogleAuth, true);
+    assert.equal(arabicDigitLogin.data.token, '');
+
+    // Counselor & Student existing sessions remain valid even after admin code rotation & logout!
+    const cslStillActive = await apiJson(baseUrl, '/auth/me', { cookie: cslCookie });
+    assert.equal(cslStillActive.status, 200);
+    const stuStillActive = await apiJson(baseUrl, '/my-record', { cookie: stuCookie });
+    assert.equal(stuStillActive.status, 200);
   } finally {
     await close();
     fs.rmSync(tempDir, { recursive: true, force: true });
     if (prevAdminEnv !== undefined) process.env.SCHOOL_ADMIN_CODE = prevAdminEnv;
+    else delete process.env.SCHOOL_ADMIN_CODE;
     if (prevEmailEnv !== undefined) process.env.SCHOOL_ADMIN_EMAIL = prevEmailEnv;
+    else delete process.env.SCHOOL_ADMIN_EMAIL;
   }
 });
+
+test('Migration preserves existing legacy per-UID school data and counselor/student code mappings under one canonical schoolId', async () => {
+  const prevAdminEnv = process.env.SCHOOL_ADMIN_CODE;
+  const prevEmailEnv = process.env.SCHOOL_ADMIN_EMAIL;
+  delete process.env.SCHOOL_ADMIN_CODE;
+  process.env.SCHOOL_ADMIN_EMAIL = 'bssam07815281649@gmail.com';
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-legacy-migrate-test-'));
+
+  try {
+    // Seed a legacy store.json where default_school is empty and populated school lives under school_uid_legacy
+    const legacyAdminHash = await import('../server/schoolRecordStore').then((m) => m.hashAccessCode('LEGACY_ADM_99'));
+    const legacyCslHash = await import('../server/schoolRecordStore').then((m) => m.hashAccessCode('LEGACY_CSL_11'));
+    const legacyStore = {
+      schemaVersion: 2,
+      activePublicSchoolId: 'school_uid_legacy',
+      adminAuth: {
+        mode: 'custom',
+        customCred: {
+          hash: legacyAdminHash.hash,
+          salt: legacyAdminHash.salt,
+          status: 'active',
+          sessionVersion: 1,
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        sessionVersion: 1,
+        displayName: 'المدير',
+      },
+      schools: {
+        default_school: {
+          id: 'default_school',
+          ownerUid: '',
+          ownerEmail: '',
+          school: {
+            id: 'default_school',
+            name: 'فارغة',
+            academicYear: '2025 - 2026',
+            directorate: '-',
+            overview: '',
+            vision: '',
+            mission: '',
+            goals: [],
+            updatedAt: '',
+          },
+          announcements: [],
+          stages: [],
+          sections: [],
+          students: [],
+          absences: [],
+          subjects: [],
+          templates: [],
+          auditLogs: [],
+        },
+        school_uid_legacy: {
+          id: 'school_uid_legacy',
+          ownerUid: 'uid_legacy_admin',
+          ownerEmail: 'bssam07815281649@gmail.com',
+          school: {
+            id: 'school_uid_legacy',
+            name: 'ثانوية بغداد التراثية',
+            academicYear: '2025 - 2026',
+            directorate: 'تربية الرصافة',
+            overview: '',
+            vision: '',
+            mission: '',
+            goals: [],
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+          announcements: [],
+          stages: [{ id: 'stg_1', name: 'الخامس العلمي', orderIndex: 0 }],
+          sections: [
+            {
+              id: 'sec_legacy_1',
+              stageId: 'stg_1',
+              name: 'أ',
+              counselorName: 'أ. محمد',
+              counselorCodeStatus: 'active',
+              orderIndex: 0,
+              counselorCred: {
+                hash: legacyCslHash.hash,
+                salt: legacyCslHash.salt,
+                status: 'active',
+                sessionVersion: 1,
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                displayCode: 'LEGACY_CSL_11',
+              },
+            },
+          ],
+          students: [],
+          absences: [],
+          subjects: [],
+          templates: [],
+          auditLogs: [],
+        },
+      },
+    };
+    fs.writeFileSync(path.join(tempDir, 'store.json'), JSON.stringify(legacyStore, null, 2), 'utf-8');
+
+    const { baseUrl, close } = await startTestServer(tempDir, async (token) => {
+      if (token === 'token_new_device') {
+        return {
+          uid: 'uid_legacy_admin',
+          email: 'bssam07815281649@gmail.com',
+          emailVerified: true,
+          displayName: 'بسام',
+        };
+      }
+      return null;
+    });
+
+    try {
+      // Public automatically picks populated existing school_uid_legacy as canonicalSchoolId
+      const pub = await apiJson(baseUrl, '/public');
+      assert.equal(pub.status, 200);
+      assert.equal(pub.data.school.id, 'school_uid_legacy');
+      assert.equal(pub.data.school.name, 'ثانوية بغداد التراثية');
+
+      // Legacy counselor code works immediately even before any admin Google login
+      const cslLogin = await apiJson(baseUrl, '/auth/login', {
+        method: 'POST',
+        body: { code: 'LEGACY_CSL_11' },
+      });
+      assert.equal(cslLogin.status, 200);
+      assert.equal(cslLogin.data.session.schoolId, 'school_uid_legacy');
+      assert.equal(cslLogin.data.session.sectionId, 'sec_legacy_1');
+
+      // Admin login on new session keeps the EXACT canonical school_uid_legacy without overwriting stages/sections
+      const admRes = await apiJson(baseUrl, '/auth/google-admin', {
+        method: 'POST',
+        body: { idToken: 'token_new_device', code: 'LEGACY_ADM_99' },
+      });
+      assert.equal(admRes.status, 200);
+      assert.equal(admRes.data.session.schoolId, 'school_uid_legacy');
+      assert.equal(admRes.data.isNewSchool, false);
+
+      const admWs = await apiJson(baseUrl, '/workspace', { token: admRes.data.token });
+      assert.equal(admWs.status, 200);
+      assert.equal(admWs.data.stages.length, 1);
+      assert.equal(admWs.data.sections.length, 1);
+    } finally {
+      await close();
+    }
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    if (prevAdminEnv !== undefined) process.env.SCHOOL_ADMIN_CODE = prevAdminEnv;
+    else delete process.env.SCHOOL_ADMIN_CODE;
+    if (prevEmailEnv !== undefined) process.env.SCHOOL_ADMIN_EMAIL = prevEmailEnv;
+    else delete process.env.SCHOOL_ADMIN_EMAIL;
+  }
+});
+
+test('Malformed non-email SCHOOL_ADMIN_EMAIL env value does not block verified Google admin with valid SCHOOL_ADMIN_CODE', async () => {
+  const prevAdminEnv = process.env.SCHOOL_ADMIN_CODE;
+  const prevEmailEnv = process.env.SCHOOL_ADMIN_EMAIL;
+  process.env.SCHOOL_ADMIN_CODE = 'ADMIN_CODE_9';
+  process.env.SCHOOL_ADMIN_EMAIL = 'not_email9';
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-malformed-email-test-'));
+
+  const mockVerifier = async (token: string) => {
+    if (token === 'token_bssam') {
+      return {
+        uid: 'uid_bssam',
+        email: 'bssam07815281649@gmail.com',
+        emailVerified: true,
+        displayName: 'بسام',
+      };
+    }
+    if (token === 'token_intruder') {
+      return {
+        uid: 'uid_intruder',
+        email: 'other@gmail.com',
+        emailVerified: true,
+        displayName: 'مستخدم آخر',
+      };
+    }
+    return null;
+  };
+
+  const { baseUrl, close } = await startTestServer(tempDir, mockVerifier);
+
+  try {
+    const okLogin = await apiJson(baseUrl, '/auth/google-admin', {
+      method: 'POST',
+      body: { idToken: 'token_bssam', code: 'ADMIN_CODE_9' },
+    });
+    assert.equal(okLogin.status, 200);
+    assert.equal(okLogin.data.session.role, 'admin');
+    assert.equal(okLogin.data.session.ownerEmail, 'bssam07815281649@gmail.com');
+
+    // Once claimed, another Google account is still rejected with 403
+    const otherLogin = await apiJson(baseUrl, '/auth/google-admin', {
+      method: 'POST',
+      body: { idToken: 'token_intruder', code: 'ADMIN_CODE_9' },
+    });
+    assert.equal(otherLogin.status, 403);
+  } finally {
+    await close();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    if (prevAdminEnv !== undefined) process.env.SCHOOL_ADMIN_CODE = prevAdminEnv;
+    else delete process.env.SCHOOL_ADMIN_CODE;
+    if (prevEmailEnv !== undefined) process.env.SCHOOL_ADMIN_EMAIL = prevEmailEnv;
+    else delete process.env.SCHOOL_ADMIN_EMAIL;
+  }
+});
+

@@ -76,6 +76,7 @@ export interface InternalSchoolTenant {
 
 export interface InternalSchoolStoreData {
   schemaVersion: number;
+  canonicalSchoolId?: string;
   activePublicSchoolId: string;
   schools: Record<string, InternalSchoolTenant>;
   adminAuth: {
@@ -224,6 +225,7 @@ function defaultTenantData(schoolId = 'default_school', ownerUid = '', ownerEmai
 function defaultStoreData(): InternalSchoolStoreData {
   return {
     schemaVersion: 2,
+    canonicalSchoolId: 'default_school',
     activePublicSchoolId: 'default_school',
     schools: {
       default_school: defaultTenantData('default_school'),
@@ -293,6 +295,7 @@ export class SchoolRecordStore {
   private data: InternalSchoolStoreData;
   private envAdminCodeCache: { raw: string; hash: string; salt: string } | null = null;
   private loginRateMap = new Map<string, { failTimestamps: number[]; lockedUntil: number; streak: number }>();
+  private warnedInvalidAdminEmailEnv = false;
 
   constructor(dataDirOverride?: string) {
     this.baseDir = path.resolve(dataDirOverride || path.join(process.cwd(), '.school-record-data'));
@@ -319,6 +322,50 @@ export class SchoolRecordStore {
     }
   }
 
+  private tenantDataScore(t?: InternalSchoolTenant): number {
+    if (!t) return -1;
+    return (
+      t.stages.length * 10 +
+      t.sections.length * 10 +
+      t.students.length * 5 +
+      t.subjects.length * 10 +
+      t.absences.length * 2 +
+      t.announcements.length * 2 +
+      t.templates.length +
+      (t.ownerEmail ? 1 : 0)
+    );
+  }
+
+  private resolveCanonicalSchoolId(
+    schools: Record<string, InternalSchoolTenant>,
+    preferredCanonical?: string,
+    activePublicId?: string
+  ): string {
+    if (preferredCanonical && schools[preferredCanonical]) {
+      return preferredCanonical;
+    }
+    if (
+      activePublicId &&
+      schools[activePublicId] &&
+      (this.tenantDataScore(schools[activePublicId]) > 0 || Object.keys(schools).length === 1)
+    ) {
+      return activePublicId;
+    }
+    if (schools.default_school && this.tenantDataScore(schools.default_school) > 0) {
+      return 'default_school';
+    }
+    let bestId = schools.default_school ? 'default_school' : Object.keys(schools)[0];
+    let bestScore = this.tenantDataScore(schools[bestId]);
+    for (const [id, t] of Object.entries(schools)) {
+      const score = this.tenantDataScore(t);
+      if (score > bestScore) {
+        bestScore = score;
+        bestId = id;
+      }
+    }
+    return bestId;
+  }
+
   private loadFromDisk(): InternalSchoolStoreData {
     if (!fs.existsSync(this.storeFilePath)) {
       const initial = defaultStoreData();
@@ -338,7 +385,7 @@ export class SchoolRecordStore {
         ...(parsed.adminAuth || {}),
       };
 
-      // Schema v2: multi-tenant schools map
+      // Schema v2: preserve all existing tenants & stabilize ONE canonical schoolId
       if (parsed.schools && typeof parsed.schools === 'object') {
         const schools: Record<string, InternalSchoolTenant> = {};
         for (const [k, v] of Object.entries(parsed.schools as Record<string, Partial<InternalSchoolTenant>>)) {
@@ -349,18 +396,22 @@ export class SchoolRecordStore {
         if (Object.keys(schools).length === 0) {
           schools.default_school = defaultTenantData('default_school');
         }
-        const activeId =
-          parsed.activePublicSchoolId && schools[parsed.activePublicSchoolId]
-            ? parsed.activePublicSchoolId
-            : schools.default_school
-            ? 'default_school'
-            : Object.keys(schools)[0];
-        return {
+        const canonicalId = this.resolveCanonicalSchoolId(
+          schools,
+          typeof parsed.canonicalSchoolId === 'string' ? parsed.canonicalSchoolId : undefined,
+          typeof parsed.activePublicSchoolId === 'string' ? parsed.activePublicSchoolId : undefined
+        );
+        const normalized: InternalSchoolStoreData = {
           schemaVersion: 2,
-          activePublicSchoolId: activeId,
+          canonicalSchoolId: canonicalId,
+          activePublicSchoolId: canonicalId,
           schools,
           adminAuth,
         };
+        if (parsed.canonicalSchoolId !== canonicalId || parsed.activePublicSchoolId !== canonicalId) {
+          this.atomicWriteFile(this.storeFilePath, JSON.stringify(normalized, null, 2));
+        }
+        return normalized;
       }
 
       // Migrate v1 store -> v2 default_school tenant seamlessly
@@ -385,6 +436,7 @@ export class SchoolRecordStore {
         );
         const migrated: InternalSchoolStoreData = {
           schemaVersion: 2,
+          canonicalSchoolId: 'default_school',
           activePublicSchoolId: 'default_school',
           schools: {
             default_school: migratedDefault,
@@ -422,16 +474,29 @@ export class SchoolRecordStore {
     this.atomicWriteFile(this.storeFilePath, JSON.stringify(this.data, null, 2));
   }
 
+  private getCanonicalSchoolId(): string {
+    const candidate = this.data.canonicalSchoolId || this.data.activePublicSchoolId;
+    if (candidate && this.data.schools[candidate]) return candidate;
+    if (this.data.schools.default_school) return 'default_school';
+    return Object.keys(this.data.schools)[0] || 'default_school';
+  }
+
+  private getCanonicalTenant(): InternalSchoolTenant {
+    const id = this.getCanonicalSchoolId();
+    if (!this.data.schools[id]) {
+      this.data.schools[id] = defaultTenantData(id);
+    }
+    this.data.canonicalSchoolId = id;
+    this.data.activePublicSchoolId = id;
+    return this.data.schools[id];
+  }
+
   private getPublicTenant(): InternalSchoolTenant {
-    return (
-      this.data.schools[this.data.activePublicSchoolId] ||
-      this.data.schools.default_school ||
-      Object.values(this.data.schools)[0]
-    );
+    return this.getCanonicalTenant();
   }
 
   private getTenantForSession(session: SchoolSessionUser): InternalSchoolTenant {
-    const id = session.schoolId || this.data.activePublicSchoolId || 'default_school';
+    const id = session.schoolId || this.getCanonicalSchoolId();
     const tenant = this.data.schools[id];
     if (!tenant) {
       throw new SchoolRecordError(401, 'مساحة المدرسة غير موجودة أو انتهت الجلسة.');
@@ -597,6 +662,7 @@ export class SchoolRecordStore {
 
       if (payload.role === 'admin') {
         if (!this.isAdminCodeConfigured()) return null;
+        if (payload.authMethod !== 'google') return null;
         if (payload.sv !== this.data.adminAuth.sessionVersion) return null;
         return {
           role: 'admin',
@@ -647,7 +713,10 @@ export class SchoolRecordStore {
     }
   }
 
-  public async loginWithCode(rawCode: string, clientKey: string): Promise<{ token: string; session: SchoolSessionUser }> {
+  public async loginWithCode(
+    rawCode: string,
+    clientKey: string
+  ): Promise<{ token: string; session: SchoolSessionUser; requiresGoogleAuth?: boolean }> {
     this.checkLoginRateLimit(clientKey);
     const code = normalizeAccessCode(rawCode);
     if (!code || code.length < 3) {
@@ -655,30 +724,17 @@ export class SchoolRecordStore {
       throw new SchoolRecordError(401, 'كود الدخول غير صحيح أو مبطل.');
     }
 
-    // 1. Check Admin code
+    // 1. Check Admin code: opens Administrator Google gate ONLY — NEVER issues an admin DB token without Google auth!
     if (await this.verifyAdminCode(code)) {
       this.clearLoginFailure(clientKey);
-      const pubTenant = this.getPublicTenant();
+      const canonicalTenant = this.getCanonicalTenant();
       const session: SchoolSessionUser = {
         role: 'admin',
         displayName: this.data.adminAuth.displayName || 'مدير المدرسة',
-        schoolId: pubTenant.id,
-        ownerEmail: pubTenant.ownerEmail || undefined,
+        schoolId: canonicalTenant.id,
+        ownerEmail: canonicalTenant.ownerEmail || undefined,
       };
-      const token = this.signSessionToken({
-        sid: makeId('ses'),
-        schoolId: pubTenant.id,
-        role: 'admin',
-        displayName: session.displayName,
-        ownerEmail: pubTenant.ownerEmail || undefined,
-        authMethod: 'code',
-        sv: this.data.adminAuth.sessionVersion,
-        iat: Date.now(),
-        exp: Date.now() + 12 * 60 * 60 * 1000,
-      });
-      this.appendAudit(pubTenant, { name: session.displayName, role: 'admin' }, 'تسجيل دخول المدير', 'auth', 'admin', 'المدير', '-', 'جلسة نشطة');
-      this.persist();
-      return { token, session };
+      return { token: '', requiresGoogleAuth: true, session };
     }
 
     // 2. Check Counselor codes across ALL school tenants (code-only, no Google needed)
@@ -774,6 +830,21 @@ export class SchoolRecordStore {
     throw new SchoolRecordError(401, 'كود الدخول غير صحيح أو تم إبطاله.');
   }
 
+  private getAllowedAdminEmails(): string[] {
+    const raw = (process.env.SCHOOL_ADMIN_EMAIL || '').trim();
+    if (!raw) return [];
+    const tokens = raw
+      .split(/[,;\s]+/)
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    const validEmails = tokens.filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
+    if (tokens.length > 0 && validEmails.length === 0 && !this.warnedInvalidAdminEmailEnv) {
+      this.warnedInvalidAdminEmailEnv = true;
+      console.warn('SCHOOL_ADMIN_EMAIL is set but does not contain a valid email address; falling back to verified school owner binding.');
+    }
+    return validEmails;
+  }
+
   public async loginWithVerifiedGoogleAdmin(
     input: {
       verified: { uid: string; email: string; emailVerified: boolean; displayName?: string };
@@ -791,6 +862,30 @@ export class SchoolRecordStore {
       throw new SchoolRecordError(
         401,
         'يجب تسجيل الدخول بحساب Google موثّق البريد الإلكتروني للمتابعة.'
+      );
+    }
+
+    // Always bind to ONE permanent stable schoolId — never fork a new school database per device/login
+    const tenant = this.getCanonicalTenant();
+    const schoolId = tenant.id;
+    const wasOwned = Boolean(tenant.ownerEmail || tenant.ownerUid);
+
+    const allowedEmails = this.getAllowedAdminEmails();
+    if (allowedEmails.length > 0) {
+      if (!allowedEmails.includes(email)) {
+        this.recordLoginFailure(clientKey);
+        console.warn(`Admin Google login rejected (403): signed-in email not in SCHOOL_ADMIN_EMAIL allowlist for ${schoolId}.`);
+        throw new SchoolRecordError(
+          403,
+          'حساب Google هذا غير مخوّل لإدارة المدرسة. استخدم حساب المدير المصرح به.'
+        );
+      }
+    } else if (tenant.ownerEmail && tenant.ownerEmail.trim().toLowerCase() !== email) {
+      this.recordLoginFailure(clientKey);
+      console.warn(`Admin Google login rejected (403): signed-in email does not match registered school owner for ${schoolId}.`);
+      throw new SchoolRecordError(
+        403,
+        'حساب Google هذا غير مخوّل لإدارة هذه المدرسة. يجب الدخول بحساب المالك الإداري المسجل.'
       );
     }
 
@@ -829,20 +924,16 @@ export class SchoolRecordStore {
 
     this.clearLoginFailure(clientKey);
 
-    // Isolate school storage per Gmail UID
-    const schoolId = makeSchoolIdFromUid(verified.uid);
-    let isNewSchool = false;
-    let tenant = this.data.schools[schoolId];
-    if (!tenant) {
-      tenant = defaultTenantData(schoolId, verified.uid, email);
-      this.data.schools[schoolId] = tenant;
-      isNewSchool = true;
-    } else {
-      tenant.ownerUid = verified.uid;
-      tenant.ownerEmail = email;
-      tenant.school.id = schoolId;
-    }
+    const isNewSchool =
+      !wasOwned &&
+      tenant.stages.length === 0 &&
+      tenant.sections.length === 0 &&
+      tenant.students.length === 0 &&
+      tenant.subjects.length === 0;
 
+    tenant.ownerUid = verified.uid;
+    tenant.ownerEmail = email;
+    tenant.school.id = schoolId;
     tenant.firebaseSync = {
       ...tenant.firebaseSync,
       linked: true,
@@ -852,6 +943,7 @@ export class SchoolRecordStore {
       lastSyncMessage: tenant.firebaseSync.lastSyncMessage || `مربوط بحساب ${email}`,
     };
 
+    this.data.canonicalSchoolId = schoolId;
     this.data.activePublicSchoolId = schoolId;
 
     const displayName = clampStr(verified.displayName || '', 160) || email || 'مدير المدرسة';
