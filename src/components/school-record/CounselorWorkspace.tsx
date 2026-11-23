@@ -391,11 +391,6 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
                 المرشد: {section.counselorName || 'غير مسمى'}
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              {workspace.session.role === 'admin'
-                ? 'عرض المدير داخل نطاق الشعبة'
-                : 'بيانات الشعبة واسم المرشد محددة من الإدارة (للقراءة فقط) · الصلاحيات محصورة بهذه الشعبة.'}
-            </p>
           </div>
         </div>
 
@@ -614,7 +609,7 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
                 </button>
 
                 <span className="text-[11px] text-slate-600 dark:text-slate-300">
-                  يُصدر أكواداً فريدة للطلبة الذين لا يملكون كوداً مفعّلاً ويُرتبها 20 طالباً في كل صفحة A4.
+                  
                 </span>
               </div>
             </div>
@@ -733,7 +728,7 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
                                 </div>
                               ) : (
                                 <p className="text-[11px] text-amber-700 dark:text-amber-300">
-                                  كود سابق — اضغط «تغيير الكود» لإظهاره وطباعته
+                                  كود صادر
                                 </p>
                               ))}
                             {stu.notes && <p className="text-[11px] text-slate-500">{stu.notes}</p>}

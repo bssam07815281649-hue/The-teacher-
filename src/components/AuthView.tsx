@@ -8,7 +8,7 @@ import {
   Eye,
   EyeOff,
   GraduationCap,
-  KeyRound,
+  Megaphone,
   Library,
   Loader2,
   School,
@@ -112,7 +112,7 @@ export function AuthView({
       } else if (status === 401) {
         if (publicData && !publicData.adminCodeConfigured) {
           setMessage(
-            'لم يتم تعيين كود المدير الأول بعد. إذا كنت مدير المدرسة، اضغط على زر «صفحة الإدارة (كود المدير + Google)» أدناه لتعيين كود المدير الخاص بك.'
+            'لم يتم تعيين كود المدير الأول بعد. إذا كنت مدير المدرسة، اضغط على زر «صفحة الإدارة» أدناه لتعيين كود المدير الخاص بك.'
           );
         } else {
           setMessage('الكود غير صحيح أو تم إبطاله. اضغط «إظهار» لمراجعة الكود المكتوب أو راجع إدارة المدرسة.');
@@ -157,6 +157,10 @@ export function AuthView({
   const coverSrc = publicData?.school.coverDataUrl || schoolDefaults.image;
   const logoSrc = publicData?.school.logoDataUrl || '';
 
+  const announcements = (publicData?.announcements ?? [])
+    .filter(item => item.visibility === 'public')
+    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt.localeCompare(a.createdAt));
+
   const infoSections = [
     {
       title: 'عن المدرسة',
@@ -199,9 +203,6 @@ export function AuthView({
             <header className="space-y-2 py-4 text-center">
               <BookOpen className="mx-auto text-violet-600" size={56} />
               <h1 className="text-3xl font-bold">المعلّم الذكي</h1>
-              <p className="text-sm text-slate-600 dark:text-slate-300">
-                مفتوح مجاناً للجميع — ارفع كتابك وابدأ الدراسة والاختبارات فوراً دون تسجيل دخول أو كود
-              </p>
             </header>
             <img
               className="aspect-[2/1] w-full rounded-2xl object-cover"
@@ -239,34 +240,16 @@ export function AuthView({
           </>
         ) : (
           <>
-            {/* Quick link to open AI Smart Tutor without code */}
-            <a
-              href="#tutor"
-              className="flex items-center justify-between rounded-2xl bg-violet-700 px-4 py-3.5 font-bold text-white shadow-sm hover:bg-violet-800 transition-colors"
-            >
-              <span className="flex items-center gap-2.5">
-                <BookOpen className="w-5 h-5" />
-                <span>الدخول إلى المعلّم الذكي (مفتوح للجميع بدون كود)</span>
-              </span>
-              <ChevronLeft className="w-5 h-5" />
-            </a>
-
             {/* Unified School Code Login (Principal / Counselor / Student) */}
             <div className="rounded-2xl border border-violet-200 dark:border-slate-700 bg-violet-50/60 dark:bg-slate-800/50 p-4 space-y-2.5">
-              <div className="flex items-center gap-2 text-xs font-bold text-violet-900 dark:text-violet-200">
-                <KeyRound className="w-4 h-4 text-violet-600 dark:text-violet-300 shrink-0" />
-                <span>تسجيل الدخول بالكود (المدير · المرشد التربوي · الطالب)</span>
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                المرشد والطالب يدخلان مباشرة بالكود دون الحاجة لبريد أو حساب Google. أما الإدارة فتشترط كود المدير مع تسجيل الدخول بحساب Google، وتُحفظ المدرسة والأكواد على نفس الجيميل.
-              </p>
+
               <form onSubmit={login} className="flex gap-2">
                 <div className="relative min-w-0 flex-1">
                   <input
                     ref={input}
                     dir="ltr"
                     aria-label="أدخل الكود"
-                    placeholder="أدخل الكود الخاص بك..."
+                    placeholder="أدخل الكود"
                     type={showCode ? 'text' : 'password'}
                     autoComplete="current-password"
                     autoCapitalize="none"
@@ -295,18 +278,14 @@ export function AuthView({
               </form>
 
               <div className="pt-1 flex flex-wrap items-center justify-between gap-2 text-xs border-t border-violet-200/70 dark:border-slate-700/70">
-                <span className="text-slate-600 dark:text-slate-300 font-medium">
-                  {publicData && !publicData.adminCodeConfigured
-                    ? 'إعداد الإدارة وضبط كود المدير:'
-                    : 'صفحة الإدارة (كود المدير + حساب Google):'}
-                </span>
+
                 <button
                   type="button"
                   onClick={() => onSchoolRole('admin')}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 px-3 py-1.5 font-bold text-white cursor-pointer"
                 >
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>صفحة الإدارة (كود المدير + Google)</span>
+                  <span>صفحة الإدارة</span>
                 </button>
               </div>
 
@@ -369,6 +348,28 @@ export function AuthView({
                 </article>
               ))}
             </section>
+            <section className={card + ' space-y-2 p-3'} aria-label="إعلانات المدرسة">
+              <h2 className="flex items-center gap-2 text-sm font-bold"><Megaphone size={20} />إعلانات المدرسة</h2>
+              {announcements.map(item => (
+                <article key={item.id} className="border-t border-violet-200 pt-2 dark:border-slate-700">
+                  <h3 className="font-bold">{item.title}</h3>
+                  <p className="whitespace-pre-line text-sm">{item.body}</p>
+                </article>
+              ))}
+              {announcements.length === 0 && <p className="text-sm">لا توجد إعلانات معروضة.</p>}
+            </section>
+            {/* Quick link to open AI Smart Tutor without code */}
+            <a
+              href="#tutor"
+              className="flex items-center justify-between rounded-2xl bg-violet-700 px-4 py-3.5 font-bold text-white shadow-sm hover:bg-violet-800 transition-colors"
+            >
+              <span className="flex items-center gap-2.5">
+                <BookOpen className="w-5 h-5" />
+                <span>الدخول إلى المعلّم الذكي</span>
+              </span>
+              <ChevronLeft className="w-5 h-5" />
+            </a>
+
           </>
         )}
       </div>

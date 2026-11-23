@@ -143,9 +143,6 @@ export const AdminFirebaseModal: React.FC<AdminFirebaseModalProps> = ({
               <h3 className="font-display font-bold text-base text-[#171A36] dark:text-white">
                 إعدادات Firebase والمزامنة (للمدير فقط)
               </h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                ربط مشروع المدرسة بحساب Google ومراقبة الاتصال الفعلي
-              </p>
             </div>
           </div>
           <button

@@ -587,11 +587,11 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
         {/* Grades Table */}
         {activeStudents.length === 0 ? (
           <p className="text-xs text-slate-500 py-4 text-center">
-            لا يوجد طلبة نشطون في هذه الشعبة بعد. أضف الطلبة أولاً من تبويب «الطلاب والأكواد».
+            لا يوجد طلبة نشطون في الشعبة.
           </p>
         ) : sortedCols.length === 0 ? (
           <p className="text-xs text-slate-500 py-4 text-center">
-            لا توجد أعمدة بعد في هذا السجل. أضف عموداً أعلاه للبدء.
+            لا توجد أعمدة.
           </p>
         ) : (
           <div className="overflow-x-auto thin-scrollbar rounded-xl border border-slate-200 dark:border-slate-700">
@@ -723,14 +723,14 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
     if (activeStudents.length === 0) {
       return (
         <p className="text-xs text-slate-500 py-5 text-center">
-          لا يوجد طلبة نشطون في هذه الشعبة بعد. أضف الطلبة أولاً من تبويب «الطلاب والأكواد».
+          لا يوجد طلبة نشطون في الشعبة.
         </p>
       );
     }
     if (sortedCols.length === 0) {
       return (
         <p className="text-xs text-slate-500 py-5 text-center">
-          لا توجد أعمدة درجات في هذا السجل بعد. اضغط «تعديل» لإضافة الأعمدة أو استيراد الدرجات.
+          لا توجد أعمدة درجات.
         </p>
       );
     }
@@ -855,7 +855,7 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
 
       {!activeSubject ? (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 text-center text-sm text-slate-500">
-          أنشئ دفتر مادة أعلاه للبدء بإدخال الدرجات وحساب السعي السنوي.
+          لا توجد مواد.
         </div>
       ) : (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 space-y-5">
@@ -1182,7 +1182,7 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
 
                 {termRecs.length === 0 ? (
                   <div className="p-8 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-center text-xs sm:text-sm text-slate-500">
-                    لا توجد سجلات في هذا الفصل بعد. أضف سجلاً جديداً أعلاه (مثل: الشهري أو اليومي).
+                    لا توجد سجلات في هذا الفصل.
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1309,9 +1309,6 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
                       <h4 className="font-display font-bold text-sm sm:text-base text-[#171A36] dark:text-white">
                         إعدادات احتساب السعي السنوي
                       </h4>
-                      <p className="text-xs text-slate-500">
-                        يُحسب السعي السنوي كمعدل للفترات الثلاث فقط بعد توفر قيم رقمية صالحة في جميعها
-                      </p>
                     </div>
                   </div>
 

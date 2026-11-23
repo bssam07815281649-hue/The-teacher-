@@ -212,7 +212,7 @@ export const StudentRecordPortal: React.FC<StudentRecordPortalProps> = ({
             <>
               <TrendingUp className="w-5 h-5 text-emerald-700 dark:text-emerald-400 shrink-0 mt-0.5" />
               <p className="font-semibold text-emerald-900 dark:text-emerald-200">
-                نتائجك المسجلة مستقرة! يمكنك مراجعة درجاتك واختبار نفسك مباشرة في أي مادة.
+                نتائجك المسجلة مستقرة.
               </p>
             </>
           )}
@@ -331,7 +331,7 @@ export const StudentRecordPortal: React.FC<StudentRecordPortalProps> = ({
 
         {workspace.absences.length === 0 ? (
           <p className="text-xs text-emerald-700 dark:text-emerald-300 font-semibold">
-            لا توجد غيابات مسجلة في سجلك. استمر في الانتظام!
+            لا توجد غيابات مسجلة.
           </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">

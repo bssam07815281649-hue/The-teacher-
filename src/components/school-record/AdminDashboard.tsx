@@ -578,9 +578,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <p className="font-extrabold text-amber-900 dark:text-amber-200">
               لم يتم تعيين كود دخول المدير حتى الآن
             </p>
-            <p className="text-amber-800 dark:text-amber-300">
-              يمكنك الآن تعيين كود المدير السريع (6 أحرف أو أرقام على الأقل) ليتم تشفيره وحفظه على الخادم.
-            </p>
           </div>
           <button
             type="button"
@@ -867,9 +864,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </form>
 
             {sortedStages.length === 0 ? (
-              <p className="text-xs text-slate-500 text-center py-6">
-                أضف أول صف دراسي لتتمكن من إنشاء الشعب وتعيين المرشدين.
-              </p>
+              <></>
             ) : (
               <div className="space-y-2">
                 {sortedStages.map((stg, idx) => {
@@ -1030,7 +1025,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             {workspace.sections.length === 0 ? (
               <p className="text-xs text-slate-500 text-center py-8">
-                لا توجد شعب مسجلة بعد. أنشئ شعبة وحدد مرشدها ثم أصدر له كود الدخول.
+                لا توجد شعب مسجلة.
               </p>
             ) : (
               <div className="space-y-3">
@@ -1138,7 +1133,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   </span>
                                 ) : (
                                   <span className="px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-700 dark:text-amber-300">
-                                    كود سابق — اضغط «تغيير الكود» لإظهاره ونسخه
+                                    كود صادر
                                   </span>
                                 ))}
                               <span>
@@ -1284,9 +1279,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <HardDriveDownload className="w-5 h-5 text-[#653CF5]" />
                 <span>النسخ الاحتياطي المحلي واستمرارية العمل</span>
               </h3>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                يحفظ الخادم نسخة ذرية آمنة تضمن استمرار عمل المرشدين والطلبة عند انقطاع الإنترنت أو خروج المدير، مع استبعاد الأكواد والتجزئات السرية عند التصدير.
-              </p>
 
               <div className="flex flex-wrap gap-2">
                 <button
@@ -1375,9 +1367,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <ShieldAlert className="w-5 h-5 text-amber-600" />
                 <span>تغيير كود المدير</span>
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                يُشفّر كود المدير بخوارزمية scrypt، وعند تغييره تُبطل جميع جلسات المدير فوراً ويُطلب تسجيل الدخول بالكود الجديد.
-              </p>
               <div className="flex items-center gap-2">
                 <div className="relative flex-1 min-w-0">
                   <input

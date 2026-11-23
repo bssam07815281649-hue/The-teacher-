@@ -285,7 +285,7 @@ export const PageImageViewer: React.FC<PageImageViewerProps> = ({
             }`}
           >
             <Crop className="w-4 h-4" />
-            <span>{cropMode ? 'اسحب لتحديد الرسم...' : 'تحديد رسم أو شكل للشرح'}</span>
+            <span>{cropMode ? 'تحديد الرسم' : 'تحديد رسم أو شكل للشرح'}</span>
           </button>
 
           <button
@@ -306,7 +306,7 @@ export const PageImageViewer: React.FC<PageImageViewerProps> = ({
 
       {cropMode && (
         <div className="px-4 py-2 bg-blue-50 dark:bg-blue-950/50 border-b border-blue-200 dark:border-blue-900 text-xs text-blue-800 dark:text-blue-300 flex items-center justify-between">
-          <span>اسحب بالإصبع أو الفأرة فوق الرسم أو المعادلة أو الجدول داخل الصفحة لاقتطاعه بدقة عالية.</span>
+          
           <button
             type="button"
             onClick={() => setCropMode(false)}
@@ -391,9 +391,6 @@ export const PageImageViewer: React.FC<PageImageViewerProps> = ({
           <div className="flex-1 text-center sm:text-right">
             <p className="text-sm font-semibold text-slate-900 dark:text-white">
               تم تحديد جزء من الصفحة بدقة عالية
-            </p>
-            <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-              سيرى المعلم الذكي هذا الرسم مباشرة ويشرح أجزاءه وتسمياته وأسهمه.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

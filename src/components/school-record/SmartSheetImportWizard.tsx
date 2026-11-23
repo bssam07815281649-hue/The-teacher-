@@ -702,9 +702,6 @@ export const SmartSheetImportWizard: React.FC<SmartSheetImportWizardProps> = ({
             <h3 className="font-display font-bold text-base sm:text-lg text-[#171A36] dark:text-white">
               الاستيراد الذكي لكشوف الدرجات وتصدير A4
             </h3>
-            <p className="text-xs text-slate-500">
-              صورة / كاميرا / PDF ← مراجعة خلية بخلية ← تحرير الأعمدة ← مطابقة الأسماء ← معاينة PDF والترحيل الذري
-            </p>
           </div>
         </div>
 
@@ -1016,7 +1013,6 @@ export const SmartSheetImportWizard: React.FC<SmartSheetImportWizardProps> = ({
           ) : (
             <div className="p-10 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-2 text-slate-400">
               <ImageIcon className="w-10 h-10 mx-auto" />
-              <p className="text-xs sm:text-sm">ارفع صورة كشف الدرجات أو PDF أو التقط بالكاميرا للبدء.</p>
             </div>
           )}
         </div>
@@ -1028,9 +1024,6 @@ export const SmartSheetImportWizard: React.FC<SmartSheetImportWizardProps> = ({
           <div className="p-3.5 rounded-xl bg-[#EEEAFF]/60 dark:bg-violet-950/30 border border-[#653CF5]/20 text-xs space-y-1">
             <p className="font-bold text-[#4320D9] dark:text-violet-300">
               الخطوة 2: مراجعة النص الخام المستخرج خلية بخلية (RTL من اليمين إلى اليسار)
-            </p>
-            <p className="text-slate-600 dark:text-slate-300">
-              تأكد من عدم دمج الأرقام المتجاورة وعدم وجود قراءات غير واضحة قبل الانتقال لتحرير الجدول.
             </p>
           </div>
 
@@ -1106,9 +1099,6 @@ export const SmartSheetImportWizard: React.FC<SmartSheetImportWizardProps> = ({
       {/* STEP 3: Editable Table & Column Setup */}
       {step === 3 && (
         <div className="space-y-4">
-          <p className="text-xs text-slate-600 dark:text-slate-300">
-            حدّد الأعمدة المطلوب تضمينها أو استبعادها، وأدخل عنوان العمود والدرجة العظمى بوضوح (لا يتم تخمين القيم المفقودة تلقائياً):
-          </p>
 
           {/* Column configs */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

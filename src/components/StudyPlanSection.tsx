@@ -194,9 +194,6 @@ export const StudyPlanSection: React.FC<StudyPlanSectionProps> = ({
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
             خطتي الدراسية
           </h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            خطة يومية ذكية تراعي صعوبة المواد وسرعتك الفعلية ونتائج امتحاناتك
-          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -234,7 +231,7 @@ export const StudyPlanSection: React.FC<StudyPlanSectionProps> = ({
 
           {books.length === 0 ? (
             <p className="text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 p-4 rounded-xl">
-              ارفع كتاباً واحداً على الأقل في قسم «مكتبتي» أولاً ليتمكن المعلم من تحليل فصوله وبناء خطة دقيقة لك.
+              لا توجد كتب.
             </p>
           ) : (
             <>

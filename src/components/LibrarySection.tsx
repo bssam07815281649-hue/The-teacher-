@@ -83,9 +83,6 @@ export const LibrarySection: React.FC<LibrarySectionProps> = ({
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
             مكتبتي الدراسية
           </h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            ارفع كتبك أو ملخصاتك وابدأ الدراسة فوراً من آخر صفحة توقفت عندها
-          </p>
         </div>
 
         <button
@@ -118,9 +115,6 @@ export const LibrarySection: React.FC<LibrarySectionProps> = ({
             <h2 className="font-display font-bold text-sm sm:text-base text-slate-900 dark:text-white">
               هدفنا الأساسي: تحسين وتعديل المستوى العلمي للطالب
             </h2>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-              تظهر صفحات كتابك فوراً بالصورة الأصلية لسرعة التصفح، ويقرأ المعلم الذكي الصفحة بصرياً معك ويشخص نقاط ضعفك من سجل درجات الصف لرفع مستواك وتثبيت فهمك.
-            </p>
             {schoolAverage !== null && schoolAverage !== undefined && (
               <p className="text-xs font-semibold text-teal-800 dark:text-teal-300 pt-0.5">
                 معدلك الحالي في سجل درجات الصف: <span className="font-mono-num">{schoolAverage}%</span>
@@ -170,10 +164,7 @@ export const LibrarySection: React.FC<LibrarySectionProps> = ({
             </div>
             <div>
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                اسحب الملف وأفلته هنا أو اضغط للاختيار من جهازك
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                الصيغ المدعومة فعلياً: PDF · PowerPoint (PPTX) · صور (JPG, PNG, WebP) · DOCX · TXT
+                اختيار ملف
               </p>
             </div>
           </div>
@@ -238,9 +229,6 @@ export const LibrarySection: React.FC<LibrarySectionProps> = ({
             <h2 className="font-display text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
               مكتبتك جاهزة لاستقبال أول كتاب
             </h2>
-            <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed">
-              ارفع كتاب الأحياء أو الفيزياء أو الرياضيات أو أي ملزمة أو عرض تقديمي، وستظهر صفحاته فوراً بسرعة عالية ليقرأها المعلم الذكي بصرياً معك صفحةً بصفحة ويشرح كل رسمة وفكرة.
-            </p>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}

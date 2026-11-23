@@ -148,23 +148,10 @@ export const PublicSchoolPortal: React.FC<PublicSchoolPortalProps> = ({
               <h3 className="font-display font-bold text-lg text-[#171A36] dark:text-white">
                 الدخول الموحد بالكود
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                للمدير، المرشد، والطالب عبر الكود الشخصي حصراً
-              </p>
             </div>
           </div>
 
-          {!adminCodeConfigured && (
-            <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
-              <div>
-                <p className="font-bold">تنبيه إعداد المدير الأول:</p>
-                <p className="mt-0.5 leading-relaxed">
-                  لم يتم تعيين كود المدير الأول بعد — اضغط زر «دخول المدير (كود المدير + حساب Google)» أدناه لتعيين كودك الأول والدخول.
-                </p>
-              </div>
-            </div>
-          )}
+          
 
           {error && (
             <div
@@ -225,15 +212,11 @@ export const PublicSchoolPortal: React.FC<PublicSchoolPortalProps> = ({
               className="w-full min-h-[44px] rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
               <ShieldCheck className="w-4 h-4" />
-              <span>دخول المدير (كود المدير + حساب Google)</span>
+              <span>دخول المدير</span>
             </button>
           )}
 
-          <div className="p-3.5 rounded-xl bg-[#F7F7FC] dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 space-y-1 leading-relaxed">
-            <p className="font-bold text-[#171A36] dark:text-white">ملاحظة الصلاحيات:</p>
-            <p>• المرشد والطالب يدخلان مباشرة بالكود دون الحاجة لحساب Google.</p>
-            <p>• المدير يدخل عبر كود المدير + تسجيل الدخول بحساب Google، وتُحفظ مدرسته وأكواده على نفس الجيميل.</p>
-          </div>
+
         </div>
 
         {/* School Overview, Vision, Mission, Goals */}

@@ -503,9 +503,6 @@ export const SchoolGradesTab: React.FC<SchoolGradesTabProps> = ({
               <h2 className="font-display font-bold text-lg text-slate-900 dark:text-white">
                 سجل درجات الصف الحقيقية بالمدرسة
               </h2>
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-0.5">
-                سجّل درجاتك اليومية والشهرية ونصف السنة، وسيرتبها المعلم الذكي تلقائياً ويشخص مواطن الضعف لتحسين وتعديل مستواك العلمي.
-              </p>
             </div>
           </div>
 
@@ -796,9 +793,6 @@ export const SchoolGradesTab: React.FC<SchoolGradesTabProps> = ({
               <h3 className="font-display font-bold text-base text-slate-900 dark:text-white">
                 لا توجد درجات مسجلة بعد
               </h3>
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-                أضف أول درجة حصلت عليها في المدرسة (يومي أو شهر أول أو نصف السنة) ليقوم البرنامج بترتيبها حسب المادة وتحديد الفصول التي تحتاج تحسيناً.
-              </p>
             </div>
           ) : (
             groupedBySubject.map((group) => {

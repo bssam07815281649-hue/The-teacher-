@@ -382,9 +382,6 @@ export const LearnSection: React.FC<LearnSectionProps> = ({
           <h1 className="font-display text-2xl font-bold text-slate-900 dark:text-white">
             اختر كتاباً لبدء الدراسة
           </h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto">
-            افتح أي كتاب من مكتبتك أو ارفع كتاباً جديداً لتبدأ القراءة والشرح مع المعلم الذكي.
-          </p>
         </div>
 
         {books.length > 0 ? (
@@ -786,9 +783,6 @@ export const LearnSection: React.FC<LearnSectionProps> = ({
             <h3 className="font-display font-bold text-base text-slate-900 dark:text-white">
               المحادثة مع المعلم الذكي
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              يرى المعلم الصفحة {currentPageNumber} وصورتها، وتظهر هنا جميع أسئلتك المكتوبة وكلامك الصوتي وردود المعلم في محادثة واحدة متصلة
-            </p>
           </div>
         </div>
 
@@ -815,9 +809,7 @@ export const LearnSection: React.FC<LearnSectionProps> = ({
         {/* Messages (Written Questions + Saved & Live Voice Call Transcripts) */}
         <div className="p-4 space-y-3 min-h-[300px] max-h-[540px] overflow-y-auto thin-scrollbar">
           {chatMessages.length === 0 && !liveInputDraft && !liveOutputDraft ? (
-            <p className="text-center text-xs sm:text-sm text-slate-500 dark:text-slate-400 py-10">
-              اسأل معلمك كتابةً أو عبر الاتصال المباشر عن هذه الصفحة أو عن صفحات أخرى، وسيتم توثيق الحوار بالكامل هنا.
-            </p>
+            <></>
           ) : (
             chatMessages.map((msg) => (
               <div
@@ -1062,9 +1054,6 @@ export const LearnSection: React.FC<LearnSectionProps> = ({
               </div>
             </div>
             <div className="p-5 overflow-y-auto space-y-3 thin-scrollbar">
-              <p className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 p-2.5 rounded-lg">
-                هذه أهم النقاط الدراسية المستخلصة من محتوى الكتاب للمراجعة السريعة، وليست توقعاً مؤكداً لأسئلة الامتحان المدرسي.
-              </p>
               {extractingTasks ? (
                 <div className="py-12 flex flex-col items-center gap-2 text-slate-500">
                   <Loader2 className="w-7 h-7 animate-spin text-blue-700" />

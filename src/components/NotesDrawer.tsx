@@ -174,9 +174,6 @@ export const NotesDrawer: React.FC<NotesDrawerProps> = ({
           {visibleNotes.length === 0 ? (
             <div className="py-16 text-center space-y-2 text-slate-500 dark:text-slate-400">
               <p className="font-semibold text-slate-700 dark:text-slate-300">لا توجد ملاحظات محفوظة بعد</p>
-              <p className="text-xs">
-                حدد أي نص أثناء القراءة واختر «احفظ كملاحظة» أو اطلب من المعلم حفظ الشرح.
-              </p>
             </div>
           ) : (
             visibleNotes.map((note) => {

@@ -167,7 +167,6 @@ export const LibrarySection: React.FC<LibrarySectionProps> = ({
         <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 text-center space-y-4">
           <BookOpen className="w-12 h-12 text-indigo-600 mx-auto" />
           <h3 className="font-display font-bold text-lg text-slate-900 dark:text-white">مكتبتك فارغة حالياً</h3>
-          <p className="text-sm text-slate-500">اضغط على زر (أضف كتابًا) لرفع أول كتاب أو ملزمة دراسية.</p>
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}

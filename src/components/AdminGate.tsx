@@ -478,9 +478,6 @@ export function AdminGate({
             <h1 className="text-xl sm:text-2xl font-display font-bold text-[#171A36] dark:text-white">
               بوابة دخول مدير المدرسة
             </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              أدخل كود المدير وسجّل دخولك بحساب Google ليتم حفظ مدرستك وأكوادك على نفس الجيميل
-            </p>
           </div>
         </div>
 
@@ -535,11 +532,6 @@ export function AdminGate({
                   <span>{showCode ? 'إخفاء' : 'إظهار'}</span>
                 </button>
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                {adminCodeConfigured === false
-                  ? 'عند الدخول لأول مرة سيتم تشفير هذا الكود وحفظه ليكون كود المدير المعتمد.'
-                  : 'يمكن لأي شخص الدخول لصفحة الإدارة بحساب Google بشرط إدخال كود المدير الصحيح، وتُحفظ بيانات مدرسته وأكواده على نفس حساب الجيميل.'}
-              </p>
             </div>
 
             {/* Step 2: Connected Google Account or Sign-In Trigger */}
@@ -612,7 +604,7 @@ export function AdminGate({
                 onClick={() => void googleRedirectLogin()}
                 className="w-full min-h-[42px] rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold cursor-pointer disabled:opacity-60"
               >
-                تسجيل الدخول عبر إعادة التوجيه (إذا كانت النوافذ المنبثقة محجوبة)
+                الدخول بإعادة التوجيه
               </button>
             )}
           </form>
