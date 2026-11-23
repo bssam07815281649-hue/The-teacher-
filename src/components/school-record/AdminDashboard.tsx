@@ -517,7 +517,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           <button
             type="button"
-            onClick={() => void onWorkspaceRefresh()}
+            onClick={() =>
+              void onWorkspaceRefresh().catch((err) =>
+                setError(err instanceof Error ? err.message : 'تعذر تحديث البيانات.')
+              )
+            }
             className="min-h-[40px] px-3 rounded-xl bg-[#F7F7FC] dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
             title="تحديث البيانات"
           >
@@ -894,9 +898,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             type="button"
                             onClick={async () => {
                               if (!editingStage.name.trim()) return;
-                              await upsertStageApi({ id: stg.id, name: editingStage.name.trim() });
-                              setEditingStage(null);
-                              await onWorkspaceRefresh();
+                              setError('');
+                              try {
+                                await upsertStageApi({ id: stg.id, name: editingStage.name.trim() });
+                                setEditingStage(null);
+                                await onWorkspaceRefresh();
+                              } catch (err) {
+                                setError(err instanceof Error ? err.message : 'تعذر تعديل الصف.');
+                              }
                             }}
                             className="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold cursor-pointer"
                           >
@@ -1070,14 +1079,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <button
                               type="button"
                               onClick={async () => {
-                                await upsertSectionApi({
-                                  id: sec.id,
-                                  stageId: editingSection.stageId,
-                                  name: editingSection.name.trim(),
-                                  counselorName: editingSection.counselorName.trim(),
-                                });
-                                setEditingSection(null);
-                                await onWorkspaceRefresh();
+                                setError('');
+                                try {
+                                  await upsertSectionApi({
+                                    id: sec.id,
+                                    stageId: editingSection.stageId,
+                                    name: editingSection.name.trim(),
+                                    counselorName: editingSection.counselorName.trim(),
+                                  });
+                                  setEditingSection(null);
+                                  await onWorkspaceRefresh();
+                                } catch (err) {
+                                  setError(err instanceof Error ? err.message : 'تعذر تعديل الشعبة.');
+                                }
                               }}
                               className="flex-1 min-h-[38px] rounded-lg bg-emerald-600 text-white text-xs font-bold cursor-pointer"
                             >
@@ -1214,9 +1228,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <button
                                 type="button"
                                 onClick={async () => {
-                                  await deleteSectionApi(sec.id);
-                                  setConfirmDeleteSecId(null);
-                                  await onWorkspaceRefresh();
+                                  setError('');
+                                  try {
+                                    await deleteSectionApi(sec.id);
+                                    setConfirmDeleteSecId(null);
+                                    await onWorkspaceRefresh();
+                                  } catch (err) {
+                                    setError(err instanceof Error ? err.message : 'تعذر حذف الشعبة.');
+                                    setConfirmDeleteSecId(null);
+                                  }
                                 }}
                                 className="min-h-[36px] px-2.5 rounded-xl bg-red-600 text-white text-xs font-bold cursor-pointer"
                               >
@@ -1346,10 +1366,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <button
                           type="button"
                           onClick={async () => {
-                            await restoreBackupApi({ fileName: b.fileName });
-                            setConfirmRestoreFile(null);
-                            await onWorkspaceRefresh();
-                            notify('تمت استعادة اللقطة الاحتياطية.');
+                            setError('');
+                            try {
+                              await restoreBackupApi({ fileName: b.fileName });
+                              setConfirmRestoreFile(null);
+                              await onWorkspaceRefresh();
+                              notify('تمت استعادة اللقطة الاحتياطية.');
+                            } catch (err) {
+                              setError(err instanceof Error ? err.message : 'تعذر استعادة اللقطة الاحتياطية.');
+                              setConfirmRestoreFile(null);
+                            }
                           }}
                           className="px-2.5 py-1.5 rounded-lg bg-amber-600 text-white text-[11px] font-bold cursor-pointer"
                         >
@@ -1412,8 +1438,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <button
                     type="button"
                     onClick={async () => {
-                      await rotateAdminCodeApi(newAdminCode.trim());
-                      await onLogout();
+                      setError('');
+                      try {
+                        await rotateAdminCodeApi(newAdminCode.trim());
+                        await onLogout();
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : 'تعذر تغيير كود المدير.');
+                        setConfirmRotateAdmin(false);
+                      }
                     }}
                     className="min-h-[40px] px-3.5 rounded-xl bg-red-600 text-white text-xs font-bold cursor-pointer"
                   >

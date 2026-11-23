@@ -31,15 +31,6 @@ import type {
 import { computeStudentSubjectSummary, getTermColumns, makeCellKey } from '../src/utils/gradeCalculations';
 
 const scryptAsync = promisify(crypto.scrypt);
-const RUNTIME_FALLBACK_SESSION_SECRET = crypto.randomBytes(32);
-
-function getSessionSigningKey(): Buffer {
-  const envSecret = (process.env.SCHOOL_SESSION_SECRET || '').trim();
-  if (envSecret.length >= 16) {
-    return crypto.createHash('sha256').update(envSecret).digest();
-  }
-  return RUNTIME_FALLBACK_SESSION_SECRET;
-}
 
 export interface SecretCredential {
   hash: string;
@@ -292,6 +283,8 @@ export class SchoolRecordStore {
   private baseDir: string;
   private backupsDir: string;
   private storeFilePath: string;
+  private sessionSecretPath: string;
+  private sessionSigningKey: Buffer | null = null;
   private data: InternalSchoolStoreData;
   private envAdminCodeCache: { raw: string; hash: string; salt: string } | null = null;
   private loginRateMap = new Map<string, { failTimestamps: number[]; lockedUntil: number; streak: number }>();
@@ -301,8 +294,34 @@ export class SchoolRecordStore {
     this.baseDir = path.resolve(dataDirOverride || path.join(process.cwd(), '.school-record-data'));
     this.backupsDir = this.resolveSafePath('backups');
     this.storeFilePath = this.resolveSafePath('store.json');
+    this.sessionSecretPath = this.resolveSafePath('.session-secret');
     this.ensureDirs();
     this.data = this.loadFromDisk();
+  }
+
+  private getSessionSigningKey(): Buffer {
+    const envSecret = (process.env.SCHOOL_SESSION_SECRET || '').trim();
+    if (envSecret.length >= 16) {
+      return crypto.createHash('sha256').update(envSecret).digest();
+    }
+    if (this.sessionSigningKey) {
+      return this.sessionSigningKey;
+    }
+    try {
+      if (fs.existsSync(this.sessionSecretPath)) {
+        const raw = fs.readFileSync(this.sessionSecretPath, 'utf-8').trim();
+        if (/^[a-f0-9]{64,}$/i.test(raw)) {
+          this.sessionSigningKey = Buffer.from(raw, 'hex').subarray(0, 32);
+          return this.sessionSigningKey;
+        }
+      }
+    } catch {
+      // Regenerate below if unreadable or corrupted
+    }
+    const generated = crypto.randomBytes(32);
+    this.atomicWriteFile(this.sessionSecretPath, generated.toString('hex'));
+    this.sessionSigningKey = generated;
+    return generated;
   }
 
   private resolveSafePath(rel: string): string {
@@ -620,7 +639,7 @@ export class SchoolRecordStore {
   private signSessionToken(payload: SessionTokenPayload): string {
     const encoded = Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64url');
     const sig = crypto
-      .createHmac('sha256', getSessionSigningKey())
+      .createHmac('sha256', this.getSessionSigningKey())
       .update(encoded)
       .digest('base64url');
     return `${encoded}.${sig}`;
@@ -644,7 +663,7 @@ export class SchoolRecordStore {
     const [encoded, providedSig] = parts;
     try {
       const expectedSig = crypto
-        .createHmac('sha256', getSessionSigningKey())
+        .createHmac('sha256', this.getSessionSigningKey())
         .update(encoded)
         .digest('base64url');
       const a = Buffer.from(providedSig, 'utf-8');

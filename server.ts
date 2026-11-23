@@ -17,7 +17,7 @@ import { SchoolRecordStore } from './server/schoolRecordStore';
 import { createSchoolRecordRouter } from './server/schoolRecordRoutes';
 import { DailyAiQuotaTracker } from './server/aiQuota';
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const ALLOWED_TEXT_MODELS = new Set([
   'gemini-3.1-flash-lite',
   'gemini-4-hydrogen',
@@ -1981,7 +1981,11 @@ ${langLockRule}
   } else {
     const distPath = path.resolve(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
+    app.get('*', (req, res) => {
+      if (req.path.startsWith('/api/')) {
+        res.status(404).json({ error: 'المسار غير موجود.' });
+        return;
+      }
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

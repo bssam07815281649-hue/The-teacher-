@@ -1020,3 +1020,106 @@ test('Malformed non-email SCHOOL_ADMIN_EMAIL env value does not block verified G
   }
 });
 
+test('Active Admin and Counselor sessions survive server restarts via persisted .session-secret when SCHOOL_SESSION_SECRET is unset', async () => {
+  const prevAdminEnv = process.env.SCHOOL_ADMIN_CODE;
+  const prevEmailEnv = process.env.SCHOOL_ADMIN_EMAIL;
+  const prevSessionSecret = process.env.SCHOOL_SESSION_SECRET;
+  delete process.env.SCHOOL_ADMIN_CODE;
+  delete process.env.SCHOOL_ADMIN_EMAIL;
+  delete process.env.SCHOOL_SESSION_SECRET;
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-restart-session-test-'));
+  const mockVerifier = async (token: string) => {
+    if (token === 'token_admin_restart') {
+      return {
+        uid: 'uid_restart_admin',
+        email: 'bssam07815281649@gmail.com',
+        emailVerified: true,
+        displayName: 'مدير المدرسة',
+      };
+    }
+    return null;
+  };
+
+  let closeServer1: (() => Promise<void>) | null = null;
+  let closeServer2: (() => Promise<void>) | null = null;
+
+  try {
+    // Server instance 1: Admin sets initial code, creates section + counselor code, Counselor logs in
+    const server1 = await startTestServer(tempDir, mockVerifier);
+    closeServer1 = server1.close;
+
+    const admLogin = await apiJson(server1.baseUrl, '/auth/google-admin', {
+      method: 'POST',
+      body: { idToken: 'token_admin_restart', initialCode: 'RESTART_ADM_2026' },
+    });
+    assert.equal(admLogin.status, 200);
+    const adminToken = admLogin.data.token as string;
+
+    const stg = await apiJson(server1.baseUrl, '/stages', {
+      method: 'POST',
+      token: adminToken,
+      body: { name: 'الخامس العلمي' },
+    });
+    const sec = await apiJson(server1.baseUrl, '/sections', {
+      method: 'POST',
+      token: adminToken,
+      body: { stageId: stg.data.stage.id, name: 'أ', counselorName: 'أحمد' },
+    });
+    await apiJson(server1.baseUrl, `/sections/${sec.data.section.id}/counselor-code`, {
+      method: 'POST',
+      token: adminToken,
+      body: { action: 'issue', code: 'CSL_RESTART_11' },
+    });
+
+    const cslLogin = await apiJson(server1.baseUrl, '/auth/login', {
+      method: 'POST',
+      body: { code: 'CSL_RESTART_11' },
+    });
+    assert.equal(cslLogin.status, 200);
+    const cslCookie = extractSessionCookie(cslLogin.cookies);
+    assert.ok(cslCookie.startsWith('school_record_session='));
+
+    // Close server instance 1 cleanly (simulating dev server / process restart)
+    await server1.close();
+    closeServer1 = null;
+
+    // Verify .session-secret exists in tempDir
+    const secretFile = path.join(tempDir, '.session-secret');
+    assert.equal(fs.existsSync(secretFile), true);
+    const rawSecret = fs.readFileSync(secretFile, 'utf-8').trim();
+
+    // Server instance 2: fresh SchoolRecordStore on the same tempDir
+    const server2 = await startTestServer(tempDir, mockVerifier);
+    closeServer2 = server2.close;
+
+    // Existing Admin Bearer token and Counselor cookie must still succeed (200, NOT 401)
+    const admWsAfterRestart = await apiJson(server2.baseUrl, '/workspace', { token: adminToken });
+    assert.equal(admWsAfterRestart.status, 200);
+    assert.equal(admWsAfterRestart.data.stages.length, 1);
+
+    const cslMeAfterRestart = await apiJson(server2.baseUrl, '/auth/me', { cookie: cslCookie });
+    assert.equal(cslMeAfterRestart.status, 200);
+    assert.equal(cslMeAfterRestart.data.session.role, 'counselor');
+
+    const cslWsAfterRestart = await apiJson(server2.baseUrl, '/workspace', { cookie: cslCookie });
+    assert.equal(cslWsAfterRestart.status, 200);
+
+    // Exported sanitized backup must NEVER contain the persisted session signing secret
+    const backup = await apiJson(server2.baseUrl, '/backups/export', { token: adminToken });
+    assert.equal(backup.status, 200);
+    assert.equal(JSON.stringify(backup.data).includes(rawSecret), false);
+  } finally {
+    if (closeServer1) await closeServer1();
+    if (closeServer2) await closeServer2();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    if (prevAdminEnv !== undefined) process.env.SCHOOL_ADMIN_CODE = prevAdminEnv;
+    else delete process.env.SCHOOL_ADMIN_CODE;
+    if (prevEmailEnv !== undefined) process.env.SCHOOL_ADMIN_EMAIL = prevEmailEnv;
+    else delete process.env.SCHOOL_ADMIN_EMAIL;
+    if (prevSessionSecret !== undefined) process.env.SCHOOL_SESSION_SECRET = prevSessionSecret;
+    else delete process.env.SCHOOL_SESSION_SECRET;
+  }
+});
+
+

@@ -119,7 +119,7 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
     return ()=>{alive=false;window.removeEventListener(SCHOOL_OFFLINE_STATUS_EVENT,refreshStatus);window.removeEventListener('online',refreshStatus);window.removeEventListener('offline',refreshStatus);};
   },[workspace.session.schoolId,workspace.session.sectionId]);
   useEffect(() => {
-    const refresh = () => { if(navigator.onLine) void onWorkspaceRefresh(); };
+    const refresh = () => { if(navigator.onLine) void onWorkspaceRefresh().catch(() => {}); };
     window.addEventListener('online', refresh);
     window.addEventListener('focus', refresh);
     const timer = window.setInterval(refresh, 60_000);
@@ -455,7 +455,11 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
           </>}
           <button
             type="button"
-            onClick={() => void onWorkspaceRefresh()}
+            onClick={() =>
+              void onWorkspaceRefresh().catch((err) =>
+                setError(err instanceof Error ? err.message : 'تعذر تحديث البيانات.')
+              )
+            }
             className="min-h-[40px] px-3 rounded-xl bg-[#F7F7FC] dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
           >
             <RefreshCw className="w-4 h-4 text-[#653CF5]" />
@@ -716,14 +720,19 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
                             <button
                               type="button"
                               onClick={async () => {
-                                await upsertStudentApi(section.id, {
-                                  id: stu.id,
-                                  fullName: editingStudent.fullName.trim(),
-                                  status: editingStudent.status,
-                                  notes: editingStudent.notes.trim(),
-                                });
-                                setEditingStudent(null);
-                                await onWorkspaceRefresh();
+                                setError('');
+                                try {
+                                  await upsertStudentApi(section.id, {
+                                    id: stu.id,
+                                    fullName: editingStudent.fullName.trim(),
+                                    status: editingStudent.status,
+                                    notes: editingStudent.notes.trim(),
+                                  });
+                                  setEditingStudent(null);
+                                  await onWorkspaceRefresh();
+                                } catch (err) {
+                                  setError(err instanceof Error ? err.message : 'تعذر تعديل بيانات الطالب.');
+                                }
                               }}
                               className="flex-1 min-h-[36px] rounded-lg bg-emerald-600 text-white text-xs font-bold cursor-pointer"
                             >
@@ -813,10 +822,16 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
                                 <button
                                   type="button"
                                   onClick={async () => {
-                                    await setStudentCodeApi(section.id, stu.id, 'revoke');
-                                    setConfirmRevokeStudentId(null);
-                                    await onWorkspaceRefresh();
-                                    notify('تم إبطال كود الطالب.');
+                                    setError('');
+                                    try {
+                                      await setStudentCodeApi(section.id, stu.id, 'revoke');
+                                      setConfirmRevokeStudentId(null);
+                                      await onWorkspaceRefresh();
+                                      notify('تم إبطال كود الطالب.');
+                                    } catch (err) {
+                                      setError(err instanceof Error ? err.message : 'تعذر إبطال كود الطالب.');
+                                      setConfirmRevokeStudentId(null);
+                                    }
                                   }}
                                   className="min-h-[34px] px-2.5 rounded-lg bg-red-600 text-white text-xs font-bold cursor-pointer"
                                 >
@@ -851,9 +866,15 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
                               <button
                                 type="button"
                                 onClick={async () => {
-                                  await deleteStudentApi(section.id, stu.id);
-                                  setConfirmDeleteStudentId(null);
-                                  await onWorkspaceRefresh();
+                                  setError('');
+                                  try {
+                                    await deleteStudentApi(section.id, stu.id);
+                                    setConfirmDeleteStudentId(null);
+                                    await onWorkspaceRefresh();
+                                  } catch (err) {
+                                    setError(err instanceof Error ? err.message : 'تعذر حذف الطالب.');
+                                    setConfirmDeleteStudentId(null);
+                                  }
                                 }}
                                 className="min-h-[34px] px-2.5 rounded-lg bg-red-600 text-white text-xs font-bold cursor-pointer"
                               >
@@ -1051,9 +1072,15 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
                         <button
                           type="button"
                           onClick={async () => {
-                            await deleteAbsenceApi(section.id, ab.id);
-                            setConfirmDeleteAbsId(null);
-                            await onWorkspaceRefresh();
+                            setError('');
+                            try {
+                              await deleteAbsenceApi(section.id, ab.id);
+                              setConfirmDeleteAbsId(null);
+                              await onWorkspaceRefresh();
+                            } catch (err) {
+                              setError(err instanceof Error ? err.message : 'تعذر حذف سجل الغياب.');
+                              setConfirmDeleteAbsId(null);
+                            }
                           }}
                           className="px-2.5 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold cursor-pointer"
                         >

@@ -146,9 +146,24 @@ export function AdminGate({
   }, []);
 
   const loadWorkspace = useCallback(async () => {
-    const ws = await fetchSchoolWorkspace();
-    if (mountedRef.current) {
-      setWorkspace(ws);
+    try {
+      const ws = await fetchSchoolWorkspace();
+      if (mountedRef.current) {
+        setWorkspace(ws);
+      }
+    } catch (err) {
+      const status = (err as { status?: number } | null)?.status;
+      if (status === 401) {
+        clearSchoolSessionToken();
+        if (mountedRef.current && !inFlightVerifyRef.current) {
+          setWorkspace(null);
+          setActiveSectionId(null);
+          setAccess('form');
+          setError('انتهت جلسة المدير. يرجى إدخال كود المدير للمتابعة.');
+        }
+        return;
+      }
+      throw err;
     }
   }, []);
 
@@ -158,6 +173,7 @@ export function AdminGate({
       setWorkspace(null);
       setActiveSectionId(null);
       setAccess('form');
+      setError('انتهت جلسة المدير. يرجى إدخال كود المدير للمتابعة.');
     });
     return () => setSchoolUnauthorizedHandler(null);
   }, []);
