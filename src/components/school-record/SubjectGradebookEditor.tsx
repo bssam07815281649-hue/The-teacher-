@@ -581,7 +581,7 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
             type="button"
             disabled={savingStructure}
             onClick={() => void handleAddColumn(targetRecId)}
-            className="min-h-[38px] px-3 rounded-lg bg-[#653CF5] hover:bg-[#4320D9] text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+            className="w-full min-h-[42px] px-3 rounded-lg bg-[#653CF5] hover:bg-[#4320D9] text-white text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>إضافة عمود</span>
@@ -1183,19 +1183,19 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
 
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex w-full min-w-0 flex-col gap-2">
                     <input
                       type="text"
                       value={newSubRecordName}
                       onChange={(e) => setNewSubRecordName(e.target.value)}
                       placeholder="اكتب اسم السجل الجديد (مثال: الشهري، اليومي، النشاط...)"
-                      className="flex-1 min-w-[200px] min-h-[42px] px-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm"
+                      className="w-full min-w-0 min-h-[42px] px-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm"
                     />
                     <button
                       type="button"
                       disabled={savingStructure || !newSubRecordName.trim()}
                       onClick={() => void handleAddSubRecord(activeTab)}
-                      className="min-h-[42px] px-4 rounded-xl bg-[#653CF5] hover:bg-[#4320D9] text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      className="w-full min-h-[44px] px-4 rounded-xl bg-[#653CF5] hover:bg-[#4320D9] text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                     >
                       <Plus className="w-4 h-4" />
                       <span>إضافة سجل جديد</span>
