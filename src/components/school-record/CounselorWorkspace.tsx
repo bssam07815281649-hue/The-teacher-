@@ -105,6 +105,7 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
   onLogout,
 }) => {
   const [activeTab, setActiveTab] = useState<CounselorTab | null>(null);
+  const unreadNotices = workspace.announcements.filter(a => a.visibility === 'internal' && !a.readBy?.[sectionId]);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
   const [busy, setBusy] = useState(false);
@@ -428,6 +429,13 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
         </div>
       </div>
 
+      {unreadNotices.length > 0 && activeTab !== 'notices' && (
+        <button type="button" onClick={() => setActiveTab('notices')}
+          className="flex w-full items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-right text-sm font-bold text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+          <span>لديك {unreadNotices.length} من بلاغات المدير الجديدة</span>
+          <span className="rounded-full bg-amber-200 px-2 py-1 text-xs dark:bg-amber-900">عرض البلاغات</span>
+        </button>
+      )}
       {activeTab ? <button className="rounded-xl border p-3" onClick={()=>setActiveTab(null)}>→ قائمة الشعبة</button> : <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         {(
           [
@@ -438,7 +446,7 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
             { id:'cases',label:'حالة الطلاب',icon:Users },
             { id:'room',label:'حالة الصف',icon:BookOpen },
             { id:'mail',label:'سجل رسائل الطلاب',icon:Edit3 },
-            { id:'notices',label:'تبليغات المدير',icon:BookOpen },
+            { id:'notices',label:unreadNotices.length ? `تبليغات المدير (${unreadNotices.length} جديد)` : 'تبليغات المدير',icon:BookOpen },
             { id: 'import_pdf', label: 'الاستيراد الذكي وتصدير A4', icon: FileSpreadsheet },
           ] as { id: CounselorTab; label: string; icon: React.ComponentType<{ className?: string }> }[]
         ).map((tab) => {
