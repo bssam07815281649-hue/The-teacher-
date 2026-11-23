@@ -970,9 +970,24 @@ export class SchoolRecordStore {
           const grade = release.official[studentId];
           releases[period] = { ...release, cells, official: grade == null ? {} : { [studentId]: grade } };
         }
-        return { id: sb.id, name: sb.name, sectionId: secId, releases, cells: {},
-          midyearColumns: [], subRecords: [], updatedAt: sb.updatedAt,
-          annualPursuitConfig: { term1ColumnIds: [], midyearColumnIds: [], term2ColumnIds: [], scaleMode: 'scale100' } };
+        // Return only this student's saved marks, including not-yet-published
+        // marks. Keep the counselor's record/column order without exposing
+        // any other student's cells or changing the official release snapshots.
+        const ownCells = Object.fromEntries(Object.entries(sb.cells || {})
+          .filter(([key, cell]) => key.startsWith(studentId + '::') && cell.status !== 'blank'));
+        return {
+          id: sb.id, name: sb.name, sectionId: secId, releases,
+          cells: ownCells,
+          midyearColumns: [...sb.midyearColumns].sort((a, b) => a.orderIndex - b.orderIndex),
+          subRecords: [...sb.subRecords]
+            .sort((a, b) => a.periodId.localeCompare(b.periodId) || a.orderIndex - b.orderIndex)
+            .map(record => ({
+              ...record,
+              columns: [...record.columns].sort((a, b) => a.orderIndex - b.orderIndex),
+            })),
+          updatedAt: sb.updatedAt,
+          annualPursuitConfig: { term1ColumnIds: [], midyearColumnIds: [], term2ColumnIds: [], scaleMode: 'scale100' },
+        };
       });
 
     return {
