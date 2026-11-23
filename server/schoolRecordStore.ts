@@ -237,6 +237,18 @@ function defaultStoreData(): InternalSchoolStoreData {
   };
 }
 
+const monthlyName = 'درجات الشهري';
+function ensureMonthly(subject: SubjectGradebook) {
+  for (const periodId of ['term1','term2'] as const) {
+    const records = subject.subRecords.filter(r => r.periodId === periodId);
+    const existing = [monthlyName,'الشهري','شهري',periodId === 'term1' ? 'درجات الفصل الأول' : 'درجات الفصل الثاني']
+      .map(name => records.find(r => r.name === name)).find(Boolean);
+    if (existing) existing.name = monthlyName;
+    else subject.subRecords.push({id:makeId('rec'),name:monthlyName,periodId,columns:[],orderIndex:records.length});
+  }
+  return subject;
+}
+
 function normalizeTenant(raw: Partial<InternalSchoolTenant>, fallbackId: string): InternalSchoolTenant {
   const tenantId = clampStr(raw.id, 128) || fallbackId;
   const base = defaultTenantData(tenantId, raw.ownerUid || '', raw.ownerEmail || '');
@@ -254,7 +266,7 @@ function normalizeTenant(raw: Partial<InternalSchoolTenant>, fallbackId: string)
     sections: Array.isArray(raw.sections) ? raw.sections : [],
     students: Array.isArray(raw.students) ? raw.students : [],
     absences: Array.isArray(raw.absences) ? raw.absences : [],
-    subjects: Array.isArray(raw.subjects) ? raw.subjects : [],
+    subjects: Array.isArray(raw.subjects) ? raw.subjects.map(ensureMonthly) : [],
     templates: Array.isArray(raw.templates) ? raw.templates : [],
     auditLogs: Array.isArray(raw.auditLogs) ? raw.auditLogs : [],
     firebaseSync: {
@@ -1983,6 +1995,12 @@ export class SchoolRecordStore {
         };
       });
 
+      for (const period of ['term1','term2'] as const) {
+        const fixed = existing.subRecords.find(r=>r.periodId===period && r.name===monthlyName);
+        const matching = subRecords.filter(r=>r.periodId===period && r.name===monthlyName);
+        if (fixed && (matching.length!==1 || matching[0].id!==fixed.id))
+          throw new SchoolRecordError(400,'سجل درجات الشهري ثابت لكل فصل.');
+      }
       const cleanedCells: Record<string, GradeCellValue> = {};
       for (const [k, v] of Object.entries(existing.cells)) {
         const parts = k.split('::');
@@ -2042,14 +2060,14 @@ export class SchoolRecordStore {
           periodId: 'term1',
           name: 'درجات الفصل الأول',
           orderIndex: 0,
-          columns: [{ id: colT1, label: 'معدل الفصل الأول', maxScore: 100, orderIndex: 0 }],
+          columns: [{ id: colT1, label: 'الشهر الأول', maxScore: 100, orderIndex: 0 }],
         },
         {
           id: makeId('rec'),
           periodId: 'term2',
           name: 'درجات الفصل الثاني',
           orderIndex: 0,
-          columns: [{ id: colT2, label: 'معدل الفصل الثاني', maxScore: 100, orderIndex: 0 }],
+          columns: [{ id: colT2, label: 'الشهر الأول', maxScore: 100, orderIndex: 0 }],
         },
       ],
       cells: {},
@@ -2061,7 +2079,7 @@ export class SchoolRecordStore {
       },
       updatedAt: ts,
     };
-    tenant.subjects.push(created);
+    tenant.subjects.push(ensureMonthly(created));
     this.appendAudit(
       tenant,
       { name: session.displayName, role: session.role },
@@ -2107,21 +2125,28 @@ export class SchoolRecordStore {
     return null;
   }
 
-  public releasePeriod(session: SchoolSessionUser, sectionId: string, subjectId: string, period: GradePeriodId, approve: boolean) {
+  public releasePeriod(session: SchoolSessionUser, sectionId: string, subjectId: string, period: GradePeriodId, approve: boolean, chosen?: string[]) {
     const tenant = this.assertSectionManager(session, sectionId);
     if (!['term1', 'midyear', 'term2'].includes(period) || typeof approve !== 'boolean')
       throw new SchoolRecordError(400, 'طلب نشر غير صالح.');
     const subject = tenant.subjects.find(s => s.sectionId === sectionId && s.id === subjectId);
     if (!subject) throw new SchoolRecordError(404, 'المادة غير موجودة.');
-    const columns = getTermColumns(subject, period);
+    const monthly = period !== 'midyear';
+    const previous = subject.releases?.[period];
+    const monthlyIds = new Set(subject.subRecords.find(r=>r.periodId===period && r.name===monthlyName)?.columns.map(c=>c.id));
+    const columns = monthly && approve ? (previous?.columns || []).filter(c=>monthlyIds.has(c.id)) :
+      getTermColumns(subject, period).filter(c=>!monthly || monthlyIds.has(c.id));
+    if (monthly && approve && (!Array.isArray(chosen) || !chosen.length || chosen.some(id=>
+      !columns.some(c=>c.id===id) || !Object.keys(previous?.cells || {}).some(key=>key.endsWith('::'+id)))))
+      throw new SchoolRecordError(400,'اختر الأشهر المنشورة التي تريد اعتمادها.');
     const selected = subject.annualPursuitConfig[period === 'midyear' ? 'midyearColumnIds' : period === 'term1' ? 'term1ColumnIds' : 'term2ColumnIds'];
-    const counted = columns.filter(c => selected.includes(c.id));
+    const counted = columns.filter(c => (monthly && approve ? chosen! : selected).includes(c.id));
     const release: ReleasedPeriod = { updatedAt: new Date().toISOString(), approved: approve,
       columns: structuredClone(columns), cells: {}, official: {} };
     for (const student of tenant.students.filter(s => s.sectionId === sectionId)) {
       for (const col of columns) {
         const key = makeCellKey(student.id, col.id);
-        const cell = subject.cells[key];
+        const cell = monthly && approve ? previous?.cells[key] : subject.cells[key];
         if (cell && cell.status !== 'blank') release.cells[key] = { ...cell };
       }
       if (!approve || !counted.length) continue;
@@ -2133,7 +2158,14 @@ export class SchoolRecordStore {
     }
     if (!Object.keys(release.cells).length) throw new SchoolRecordError(400, 'لا توجد درجات محفوظة للنشر.');
     if (approve && !counted.length) throw new SchoolRecordError(400, 'لم تحدد أعمدة للحساب. اختر أعمدة الفترة من «السعي السنوي والإعدادات» ثم اعتمدها.');
-    if (approve && !Object.keys(release.official).length) throw new SchoolRecordError(400, 'لكل طالب خانة فارغة أو غياب ضمن الأعمدة المختارة. أكمل الدرجات أو عدّل الأعمدة المحتسبة في «السعي السنوي والإعدادات».');
+    if (approve && !Object.keys(release.official).length) throw new SchoolRecordError(400, 'لكل طالب خانة فارغة أو غياب ضمن الأعمدة المختارة. أكمل الدرجات أو عدّل اختيار الأعمدة.');
+    if (monthly) {
+      release.approvedColumnIds = approve ? counted.map(c=>c.id) : previous?.approvedColumnIds;
+      if (!approve && previous?.approved) {
+        release.approved = true;
+        release.official = {...previous.official};
+      }
+    }
     subject.releases = { ...subject.releases, [period]: release };
     this.appendAudit(tenant, { name: session.displayName, role: session.role }, approve ? 'اعتماد فترة' : 'نشر درجات', 'subject', subjectId, subject.name, '', period);
     this.persist();
@@ -2275,6 +2307,7 @@ export class SchoolRecordStore {
         tenant.subjects.push(targetSubj);
       }
 
+      ensureMonthly(targetSubj);
       const tempToCol = new Map<string, GradeColumn>();
       for (const spec of payload.columnsSpec) {
         const maxScore = Number(spec.maxScore);
@@ -2302,7 +2335,8 @@ export class SchoolRecordStore {
           }
           tempToCol.set(spec.tempKey, existingCol);
         } else {
-          const recName = clampStr(spec.subRecordName || (spec.periodId === 'term1' ? 'درجات الفصل الأول' : 'درجات الفصل الثاني'), 120);
+          const inputName = clampStr(spec.subRecordName || monthlyName,120);
+          const recName = ['الشهري','شهري'].includes(inputName) ? monthlyName : inputName;
           let rec = targetSubj.subRecords.find((r) => r.periodId === spec.periodId && r.name === recName);
           if (!rec) {
             rec = {
@@ -2603,7 +2637,7 @@ export class SchoolRecordStore {
         };
       });
       tenant.absences = source.absences || [];
-      tenant.subjects = source.subjects || [];
+      tenant.subjects = (source.subjects || []).map(ensureMonthly);
       tenant.templates = source.templates || [];
       this.data.activePublicSchoolId = tenant.id;
 

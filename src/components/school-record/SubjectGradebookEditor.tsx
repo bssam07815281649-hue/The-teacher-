@@ -85,6 +85,7 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
   // Pending cell edits map: `${studentId}::${columnId}` -> GradeCellValue
   const [draftCells, setDraftCells] = useState<Record<string, GradeCellValue>>({});
   const [savingCells, setSavingCells] = useState(false);
+  const [approval,setApproval] = useState<{key:string; ids:string[]}|null>(null);
   const [savingStructure, setSavingStructure] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
@@ -989,6 +990,13 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
               className="rounded-xl border px-4 py-2 font-bold" disabled={savingStructure || savingCells || pendingDraftCount > 0}
               onClick={async () => {
                 const label = approve ? 'اعتماد درجة الفترة' : 'نشر الدرجات دون اعتماد';
+                if (approve && activeTab !== 'midyear') {
+                  const snapshot=activeSubject.releases?.[activeTab];
+                  const options=activeSubject.subRecords.find(r=>r.periodId===activeTab && r.name==='درجات الشهري')?.columns.filter(c=>snapshot?.columns.some(p=>p.id===c.id) && Object.keys(snapshot.cells).some(k=>k.endsWith('::'+c.id))) || [];
+                  if (!options.length) { setError('انشر درجات سجل الشهري أولاً.'); return; }
+                  setApproval({key:activeSubject.id+activeTab,ids:options.filter(c=>!snapshot?.approvedColumnIds || snapshot.approvedColumnIds.includes(c.id)).map(c=>c.id)});
+                  return;
+                }
                 if (!window.confirm(label + ' للطلبة؟')) return;
                 setSavingStructure(true);
                 try {
@@ -999,6 +1007,14 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
                 finally { setSavingStructure(false); }
               }}>{approve ? 'اعتماد درجة الفترة' : 'نشر الدرجات دون اعتماد'}</button>)}
           </div>}
+          {activeTab !== 'pursuit' && activeTab !== 'midyear' && approval?.key === activeSubject.id+activeTab && <fieldset className="rounded-xl border p-4 space-y-2"><legend>اختيار أشهر الاعتماد</legend>
+            {activeSubject.releases?.[activeTab]?.columns.filter(c=>activeSubject.subRecords.some(r=>r.periodId===activeTab && r.name==='درجات الشهري' && r.columns.some(col=>col.id===c.id)) && Object.keys(activeSubject.releases?.[activeTab]?.cells || {}).some(k=>k.endsWith('::'+c.id))).map(c=><label key={c.id} className="block"><input type="checkbox" checked={approval.ids.includes(c.id)} onChange={e=>setApproval({...approval,ids:e.target.checked?[...approval.ids,c.id]:approval.ids.filter(id=>id!==c.id)})}/> {c.label}</label>)}
+            <button className="rounded-lg border p-2" disabled={savingStructure || !approval.ids.length} onClick={async()=>{
+              setSavingStructure(true);
+              try { await releaseGrades(section.id,activeSubject.id,activeTab,true,approval.ids); setApproval(null); await onWorkspaceRefresh(); showToast('تم اعتماد درجة الفصل.'); }
+              catch(e){setError(e instanceof Error?e.message:'تعذر الاعتماد');} finally {setSavingStructure(false);}
+            }}>تثبيت واعتماد الأشهر المختارة</button> <button onClick={()=>setApproval(null)}>إلغاء</button>
+          </fieldset>}
           {/* TERM 1 & TERM 2 CUSTOM SUB-RECORDS (List -> Click -> Read-Only Preview -> Edit -> Edit/Import) */}
           {(activeTab === 'term1' || activeTab === 'term2') && (() => {
             const termRecs = activeSubject.subRecords
@@ -1098,7 +1114,7 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
 
                           <button
                             type="button"
-                            onClick={() => setRenamingRec({ id: activeSubRec.id, name: activeSubRec.name })}
+                            hidden={activeSubRec.name==='درجات الشهري'} disabled={activeSubRec.name==='درجات الشهري'} onClick={() => setRenamingRec({ id: activeSubRec.id, name: activeSubRec.name })}
                             className="min-h-[38px] px-3 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-[#653CF5] flex items-center gap-1 cursor-pointer"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
@@ -1125,7 +1141,7 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
                           ) : (
                             <button
                               type="button"
-                              onClick={() => setConfirmDeleteRecId(activeSubRec.id)}
+                              hidden={activeSubRec.name==='درجات الشهري'} disabled={activeSubRec.name==='درجات الشهري'} onClick={() => setConfirmDeleteRecId(activeSubRec.id)}
                               className="min-h-[38px] px-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold flex items-center gap-1 cursor-pointer"
                               title="حذف السجل الفرعي"
                             >
@@ -1162,18 +1178,7 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
                     <span className="text-xs sm:text-sm font-extrabold text-[#4320D9] dark:text-violet-200">
                       إضافة سجل جديد في {activeTab === 'term1' ? 'الفصل الأول' : 'الفصل الثاني'}
                     </span>
-                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                      {['الشهري', 'اليومي', 'الشفوي', 'الإنشاء'].map((preset) => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => setNewSubRecordName(preset)}
-                          className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-[#653CF5]/30 text-[#4320D9] dark:text-violet-300 font-bold hover:bg-[#653CF5] hover:text-white cursor-pointer"
-                        >
-                          + {preset}
-                        </button>
-                      ))}
-                    </div>
+
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">

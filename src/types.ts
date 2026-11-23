@@ -367,6 +367,7 @@ export interface AnnualPursuitConfig {
 }
 
 export interface ReleasedPeriod {
+  approvedColumnIds?: string[];
   updatedAt: string;
   approved: boolean;
   columns: GradeColumn[];

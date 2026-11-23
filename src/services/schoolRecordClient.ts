@@ -363,9 +363,9 @@ export function addSectionObservation(sectionId: string, input: {studentId?: str
   return apiRequest(`/sections/${sectionId}/observations`, {method:'POST', body:JSON.stringify(input)});
 }
 
-export function releaseGrades(sectionId: string, subjectId: string, period: 'term1' | 'midyear' | 'term2', approve: boolean) {
+export function releaseGrades(sectionId: string, subjectId: string, period: 'term1' | 'midyear' | 'term2', approve: boolean, columnIds?: string[]) {
   return apiRequest(`/sections/${sectionId}/subjects/${subjectId}/release`, {
-    method: 'POST', body: JSON.stringify({ period, approve }),
+    method: 'POST', body: JSON.stringify({ period, approve, columnIds }),
   });
 }
 

@@ -307,7 +307,7 @@ test('Server security, RBAC scope isolation, session revocation, rate limiting, 
           {
             tempKey: 'k1',
             periodId: 'term1',
-            subRecordName: 'يومي',
+            subRecordName: 'درجات الشهري',
             columnLabel: 'امتحان 1',
             maxScore: 20,
           },
@@ -368,7 +368,7 @@ test('Server security, RBAC scope isolation, session revocation, rate limiting, 
     const releasedId = goodImport.data.subject.id;
     const path = `/sections/${secAId}/subjects/${releasedId}/release`;
     const release = (token: string, approve: boolean) => apiJson(baseUrl, path, {
-      method: 'POST', token, body: {period:'term1', approve},
+      method: 'POST', token, body: {period:'term1', approve, columnIds:goodImport.data.subject.subRecords.find((r:any)=>r.periodId==='term1' && r.name==='درجات الشهري').columns.map((c:any)=>c.id)},
     });
     const readStudentSubject = async () => {
       const result = await apiJson(baseUrl, '/workspace', {token:stuToken});
@@ -377,6 +377,7 @@ test('Server security, RBAC scope isolation, session revocation, rate limiting, 
     };
     assert.deepEqual((await readStudentSubject())?.releases ?? {}, {});
     assert.equal((await release(stuToken,true)).status,403);
+    assert.equal((await release(cslAToken,true)).status,400);
     assert.equal((await release(cslAToken,false)).status,200);
     const published = (await readStudentSubject()).releases.term1;
     assert.deepEqual(published.official,{});

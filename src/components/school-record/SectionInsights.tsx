@@ -6,22 +6,33 @@ import { addSectionObservation } from '../../services/schoolRecordClient';
 const panel = 'rounded-xl border border-violet-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900';
 const field = 'w-full rounded-lg border bg-transparent px-3 py-2';
 export function Rankings({students,subjects,sections}:{students:SchoolStudent[]; subjects:SubjectGradebook[]; sections:SchoolSection[]}) {
+  const [mode,setMode]=useState('study1');
+  const period=mode.endsWith('1')?'term1':'term2';
+  const official=mode.startsWith('official');
   const ranked = students.flatMap(student => {
     const subjectMeans = subjects.filter(s => s.sectionId === student.sectionId).flatMap(s => {
-      const values = (['term1','midyear','term2'] as const).flatMap(period => getTermColumns(s,period).flatMap(col => {
+      if (official) {
+        const grade=s.releases?.[period]?.official[student.id];
+        return grade==null ? [] : [grade];
+      }
+      const values = getTermColumns(s,period).flatMap(col => {
         const cell = s.cells[student.id+'::'+col.id];
         return cell?.status === 'score' && cell.score != null && col.maxScore > 0 ? [100*cell.score/col.maxScore] : [];
-      }));
+      });
       return values.length ? [values.reduce((a,b)=>a+b,0)/values.length] : [];
     });
     const average = subjectMeans.length ? subjectMeans.reduce((a,b)=>a+b,0)/subjectMeans.length : null;
     return average == null ? [] : [{student,average}];
   });
   return <details className={panel}><summary className="cursor-pointer font-bold">المتميزون والطلاب بحاجة إلى متابعة</summary>
-    {!ranked.length ? <p className="mt-3">لا توجد درجات رقمية محفوظة.</p> : <div className="mt-3 grid gap-4 sm:grid-cols-2">
-      {[true,false].map(high => <section key={String(high)}><h4 className="font-bold">{high ? 'المتميزون · أعلى معدل' : 'بحاجة إلى متابعة · أقل من ٤٠٪'}</h4>
-        <ol className="mt-2 space-y-2">{high && ranked.every(r=>r.average<40) && <li>لا يوجد طالب متميز حالياً.</li>}{!high && !ranked.some(r=>r.average<40) && <li>لا يوجد طلاب ضمن هذا النطاق.</li>}{ranked.filter(r=>high ? r.average===Math.max(...ranked.map(x=>x.average)) && r.average>=40 : r.average<40).sort((a,b)=>(high ? b.average-a.average : a.average-b.average) || a.student.fullName.localeCompare(b.student.fullName,'ar') || a.student.id.localeCompare(b.student.id))
-          .map(({student,average},index)=><li key={student.id} className="flex justify-between gap-2"><span>{index+1}. {student.fullName} {sections.length>1 && ' · '+(sections.find(s=>s.id===student.sectionId)?.name || '')}</span><b>{average.toLocaleString('ar-IQ',{maximumFractionDigits:1})}٪</b></li>)}</ol>
+    <select className={field+' mt-3'} aria-label="أساس الترتيب" value={mode} onChange={e=>setMode(e.target.value)}>
+      <option value="study1">أثناء دراسة الفصل الأول</option><option value="official1">درجات الفصل الأول المعتمدة</option>
+      <option value="study2">أثناء دراسة الفصل الثاني</option><option value="official2">درجات الفصل الثاني المعتمدة</option>
+    </select>
+    {!ranked.length ? <p className="mt-3">{official?'لا توجد درجات معتمدة لهذا الفصل.':'لا توجد درجات رقمية محفوظة لهذا الفصل.'}</p> : <div className="mt-3 grid gap-4 sm:grid-cols-2">
+      {[true,false].map(high => <section key={String(high)}><h4 className="font-bold">{high ? 'المتميزون · أعلى خمسة' : 'بحاجة إلى متابعة · أقل من ٤٠٪'}</h4>
+        <ol className="mt-2 space-y-2">{!high && !ranked.some(r=>r.average<40) && <li>لا يوجد طلاب ضمن هذا النطاق.</li>}{ranked.filter(r=>high || r.average<40).sort((a,b)=>(high ? b.average-a.average : a.average-b.average) || a.student.fullName.localeCompare(b.student.fullName,'ar') || a.student.id.localeCompare(b.student.id))
+          .slice(0,high?5:ranked.length).map(({student,average},index)=><li key={student.id} className="flex justify-between gap-2"><span>{index+1}. {student.fullName} {sections.length>1 && ' · '+(sections.find(s=>s.id===student.sectionId)?.name || '')}</span><b>{average.toLocaleString('ar-IQ',{maximumFractionDigits:1})}٪</b></li>)}</ol>
       </section>)}</div>}
   </details>;
 }
