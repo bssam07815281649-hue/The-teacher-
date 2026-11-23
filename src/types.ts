@@ -262,6 +262,8 @@ export interface SchoolAnnouncement {
   createdAt: string;
   updatedAt: string;
   authorName: string;
+  // Seen acknowledgements are keyed by counselor section, not a browser flag.
+  readBy?: Record<string, { counselorName: string; readAt: string }>;
 }
 
 export interface SchoolProfile {
