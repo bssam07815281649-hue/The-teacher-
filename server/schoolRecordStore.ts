@@ -1219,6 +1219,29 @@ export class SchoolRecordStore {
     return created;
   }
 
+  public acknowledgeAnnouncement(session: SchoolSessionUser, announcementId: string): SchoolAnnouncement {
+    if (session.role !== 'counselor' || !session.sectionId) {
+      throw new SchoolRecordError(403, 'تأكيد قراءة البلاغ مخصص لمرشد الشعبة.');
+    }
+    const tenant = this.getTenantForSession(session);
+    const announcement = tenant.announcements.find(a => a.id === announcementId && a.visibility === 'internal');
+    if (!announcement) throw new SchoolRecordError(404, 'البلاغ غير موجود.');
+    const section = tenant.sections.find(s => s.id === session.sectionId);
+    if (!section || section.counselorCred.status !== 'active') {
+      throw new SchoolRecordError(403, 'صلاحية المرشد غير نشطة.');
+    }
+    announcement.readBy ??= {};
+    // Opening the notice only confirms the first read, not an unread count reset by refresh.
+    if (!announcement.readBy[section.id]) {
+      announcement.readBy[section.id] = {
+        counselorName: section.counselorName || session.displayName || 'مرشد الشعبة',
+        readAt: new Date().toISOString(),
+      };
+      this.persist();
+    }
+    return announcement;
+  }
+
   public deleteAnnouncement(session: SchoolSessionUser, id: string) {
     this.assertAdmin(session);
     const tenant = this.getTenantForSession(session);
