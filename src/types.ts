@@ -302,6 +302,8 @@ export interface SchoolSection {
   stageId: string;
   name: string;
   counselorName: string;
+  /** Timestamp of a counselor edit confirmed and saved by the school server. */
+  lastCounselorSavedAt?: string;
   counselorCodeStatus: SchoolCodeStatus;
   counselorCodeUpdatedAt?: string;
   counselorAccessCode?: string;
