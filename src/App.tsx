@@ -310,7 +310,8 @@ export default function App() {
   }, [schoolRole, loadSchoolWorkspace]);
 
   const handleSchoolLogout = useCallback(async () => {
-    await logoutSchoolSession();
+    try { await logoutSchoolSession(); }
+    catch (error) { window.alert(error instanceof Error ? error.message : 'تعذر تسجيل الخروج قبل مزامنة التعديلات المحلية.'); return; }
     clearSchoolSessionToken();
     setSchoolWorkspace(null);
     setSchoolRole(null);
