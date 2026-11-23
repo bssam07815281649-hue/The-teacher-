@@ -106,6 +106,7 @@ export function StudentRecordPortal({ workspace, onLogout, onWorkspaceRefresh }:
           return values.length === 3 && <details key={s.id} className="border-t py-2"><summary>{s.name} · {display(mean(values))}</summary>{periods.map((p,i)=><p key={p.id}>{p.label} · {display(values[i])}</p>)}</details>;
         })}</div>}
     </section>
+    <details className={card}><summary>سجل رسائل المرشد</summary>{workspace.sections.flatMap(s=>s.messages || []).length === 0 && <p>لا توجد رسائل.</p>}{workspace.sections.flatMap(s=>s.messages || []).reverse().map(m=><article key={m.id} className="border-t py-2"><strong>{m.studentId?'ملاحظة خاصة':'إعلان للشعبة'}</strong> · {new Date(m.createdAt).toLocaleDateString('ar-IQ')}<p className="whitespace-pre-wrap">{m.body}</p></article>)}</details>
     <details className={card}><summary>الغيابات ({workspace.absences.length})</summary>{workspace.absences.map(a=><p key={a.id}>{a.date} · {a.subjectName} · {{excused:'بعذر',unexcused:'بدون عذر',medical:'إجازة مرضية',official:'مهمة رسمية'}[a.excuseType]}</p>)}</details>
   </main>;
 }

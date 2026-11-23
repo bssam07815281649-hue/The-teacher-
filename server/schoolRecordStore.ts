@@ -859,7 +859,7 @@ export class SchoolRecordStore {
     return {
       id: sec.id,
       stageId: sec.stageId,
-      ...(includeObservations ? { observations: sec.observations || [] } : {}),
+      ...(includeObservations ? { observations: sec.observations || [], caseGroups: sec.caseGroups || [], messages: sec.messages || [] } : {}),
       name: sec.name,
       counselorName: sec.counselorName,
       counselorCodeStatus: sec.counselorCodeStatus,
@@ -966,11 +966,11 @@ export class SchoolRecordStore {
     return {
       session,
       school: { ...tenant.school },
-      announcements: sortedAnnouncements,
+      announcements: sortedAnnouncements.filter(a => a.visibility === 'public'),
       stages: sortedStages,
       sections: tenant.sections
         .filter((s) => s.id === secId)
-        .map((s) => this.sanitizeSection(s)),
+        .map(s => ({ ...this.sanitizeSection(s), messages: (s.messages || []).filter(m => !m.studentId || m.studentId === studentId) })),
       students: ownStudent ? [this.sanitizeStudent(ownStudent)] : [],
       absences: tenant.absences
         .filter((ab) => ab.studentId === studentId && ab.sectionId === secId)
@@ -1584,6 +1584,30 @@ export class SchoolRecordStore {
     return this.sanitizeStudent(created, true);
   }
 
+  public sectionAction(session: SchoolSessionUser, sectionId: string, action: string, data: { name?: string; studentIds?: string[]; studentId?: string; body?: string }) {
+    const tenant = this.assertSectionManager(session, sectionId);
+    const section = tenant.sections.find(s => s.id === sectionId);
+    if (!section) throw new SchoolRecordError(404, 'الشعبة غير موجودة.');
+    const valid = (id: unknown) => typeof id === 'string' && tenant.students.some(s => s.id === id && s.sectionId === sectionId);
+    if (action === 'group') {
+      const name = typeof data.name === 'string' ? data.name.trim() : '';
+      if (!name || name.length > 100 || !Array.isArray(data.studentIds) || !data.studentIds.every(valid))
+        throw new SchoolRecordError(400, 'تحقق من اسم الحالة والطلاب المختارين.');
+      section.caseGroups ??= [];
+      let group = section.caseGroups.find(g => g.name === name);
+      if (!group) { group = {name, studentIds: []}; section.caseGroups.push(group); }
+      group.studentIds = [...new Set([...group.studentIds, ...data.studentIds])];
+    } else if (action === 'message') {
+      const body = typeof data.body === 'string' ? data.body.trim() : '';
+      if (!body || body.length > 2000 || (data.studentId !== undefined && !valid(data.studentId)))
+        throw new SchoolRecordError(400, 'تحقق من الرسالة والمستلم.');
+      section.messages ??= [];
+      section.messages.push({id:makeId('msg'),body,studentId:data.studentId,createdAt:new Date().toISOString()});
+    } else throw new SchoolRecordError(400, 'عملية غير معروفة.');
+    this.appendAudit(tenant, {name:session.displayName, role:session.role}, action === 'group' ? 'تسجيل حالة' : 'إرسال رسالة', 'section', sectionId, section.name, '', '');
+    this.persist();
+  }
+
   public addObservation(session: SchoolSessionUser, sectionId: string, input: {studentId?: string; category?: string; note?: string}) {
     const tenant = this.assertSectionManager(session, sectionId);
     const section = tenant.sections.find(s => s.id === sectionId);
@@ -1606,6 +1630,8 @@ export class SchoolRecordStore {
     const removed = tenant.students[idx];
     tenant.students.splice(idx, 1);
     const section = tenant.sections.find(s => s.id === sectionId);
+    if (section?.messages) section.messages = section.messages.filter(m => m.studentId !== studentId);
+    for (const group of section?.caseGroups || []) group.studentIds = group.studentIds.filter(id => id !== studentId);
     if (section?.observations) section.observations = section.observations.filter(n => n.studentId !== studentId);
     tenant.absences = tenant.absences.filter((ab) => ab.studentId !== studentId);
     const prefix = `${studentId}::`;
@@ -2106,7 +2132,8 @@ export class SchoolRecordStore {
         sum + m.cell.score! / m.col.maxScore, 0) / numeric.length) / 10;
     }
     if (!Object.keys(release.cells).length) throw new SchoolRecordError(400, 'لا توجد درجات محفوظة للنشر.');
-    if (approve && !Object.keys(release.official).length) throw new SchoolRecordError(400, 'لم تكتمل درجات الأعمدة المحددة للحساب لأي طالب.');
+    if (approve && !counted.length) throw new SchoolRecordError(400, 'لم تحدد أعمدة للحساب. اختر أعمدة الفترة من «السعي السنوي والإعدادات» ثم اعتمدها.');
+    if (approve && !Object.keys(release.official).length) throw new SchoolRecordError(400, 'لكل طالب خانة فارغة أو غياب ضمن الأعمدة المختارة. أكمل الدرجات أو عدّل الأعمدة المحتسبة في «السعي السنوي والإعدادات».');
     subject.releases = { ...subject.releases, [period]: release };
     this.appendAudit(tenant, { name: session.displayName, role: session.role }, approve ? 'اعتماد فترة' : 'نشر درجات', 'subject', subjectId, subject.name, '', period);
     this.persist();

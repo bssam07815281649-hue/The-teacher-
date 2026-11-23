@@ -525,6 +525,11 @@ export function createSchoolRecordRouter(
     }
   );
 
+  router.post('/sections/:sectionId/staff-actions/:action', requireSchoolSession, requireRoles(['admin','counselor']),
+    (req: SchoolAuthedRequest, res) => {
+      try { store.sectionAction(req.schoolSession!, String(req.params.sectionId), String(req.params.action), req.body || {}); res.json({ok:true}); }
+      catch (err) { sendError(res, err); }
+    });
   router.post('/sections/:sectionId/observations', requireSchoolSession, requireRoles(['admin','counselor']),
     (req: SchoolAuthedRequest, res) => {
       try {

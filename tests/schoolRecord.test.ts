@@ -392,6 +392,16 @@ test('Server security, RBAC scope isolation, session revocation, rate limiting, 
     assert.equal(staffNotes.length,2);
     const privateView = (await apiJson(baseUrl,'/workspace',{token:stuToken})).data.sections[0];
     assert.equal(privateView.observations,undefined);
+    const send = (action:string, body:Record<string,unknown>, token=cslAToken) =>
+      apiJson(baseUrl, '/sections/'+secAId+'/staff-actions/'+action,{method:'POST',token,body});
+    assert.equal((await send('group',{name:'متابعة',studentIds:[]})).status,200);
+    assert.equal((await send('group',{name:'متابعة',studentIds:[stu1Id]})).status,200);
+    assert.equal((await send('message',{body:'خاص',studentId:stu2Res.data.student.id})).status,200);
+    assert.equal((await send('message',{body:'للجميع'})).status,200);
+    assert.equal((await send('message',{body:'غير مسموح'},stuToken)).status,403);
+    const inbox=(await apiJson(baseUrl,'/workspace',{token:stuToken})).data.sections[0];
+    assert.deepEqual(inbox.messages.map((m:any)=>m.body),['للجميع']);
+    assert.equal(inbox.caseGroups,undefined);
     // Verify role-scoped code visibility BEFORE revoking counselor A
     const adminWsCheck = await apiJson(baseUrl, '/workspace', { token: adminToken });
     assert.equal(adminWsCheck.status, 200);

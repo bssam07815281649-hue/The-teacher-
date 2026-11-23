@@ -355,6 +355,10 @@ export async function deleteSubjectApi(sectionId: string, subjectId: string): Pr
   await apiRequest(`/sections/${sectionId}/subjects/${subjectId}`, { method: 'DELETE' });
 }
 
+export function saveSectionAction(sectionId: string, action: 'group'|'message', data: { name?: string; studentIds?: string[]; studentId?: string; body?: string }) {
+  return apiRequest(`/sections/${sectionId}/staff-actions/${action}`, {method:'POST',body:JSON.stringify(data)});
+}
+
 export function addSectionObservation(sectionId: string, input: {studentId?: string; category: string; note: string}) {
   return apiRequest(`/sections/${sectionId}/observations`, {method:'POST', body:JSON.stringify(input)});
 }

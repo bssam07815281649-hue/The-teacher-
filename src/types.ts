@@ -294,6 +294,8 @@ export interface SectionObservation {
 
 export interface SchoolSection {
   observations?: SectionObservation[];
+  caseGroups?: { name: string; studentIds: string[] }[];
+  messages?: { id: string; studentId?: string; body: string; createdAt: string }[];
   id: string;
   stageId: string;
   name: string;

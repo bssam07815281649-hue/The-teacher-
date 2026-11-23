@@ -1,3 +1,4 @@
+import { StaffPanel } from './StaffPanel';
 import { Rankings, Observations } from './SectionInsights';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -53,7 +54,7 @@ interface CounselorWorkspaceProps {
   onLogout: () => Promise<void>;
 }
 
-type CounselorTab = 'students' | 'absences' | 'gradebooks' | 'import_pdf';
+type CounselorTab = 'students' | 'absences' | 'gradebooks' | 'import_pdf' | 'rank' | 'cases' | 'room' | 'mail' | 'notices';
 
 function generateStudentCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -103,7 +104,7 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
   onBackToAdmin,
   onLogout,
 }) => {
-  const [activeTab, setActiveTab] = useState<CounselorTab>('students');
+  const [activeTab, setActiveTab] = useState<CounselorTab | null>(null);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
   const [busy, setBusy] = useState(false);
@@ -427,16 +428,17 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
         </div>
       </div>
 
-      <Rankings students={sectionStudents} subjects={sectionSubjects} sections={[section]} />
-      <Observations key={section.id+'-students'} section={section} students={sectionStudents} personal refresh={onWorkspaceRefresh}/>
-      <Observations key={section.id+'-class'} section={section} students={sectionStudents} personal={false} refresh={onWorkspaceRefresh}/>
-      {/* Counselor Sub-tabs */}
-      <div className="flex flex-wrap gap-2">
+      {activeTab ? <button className="rounded-xl border p-3" onClick={()=>setActiveTab(null)}>→ قائمة الشعبة</button> : <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         {(
           [
             { id: 'students', label: `الطلاب والأكواد (${sectionStudents.length})`, icon: Users },
             { id: 'absences', label: `سجل الغيابات (${sectionAbsences.length})`, icon: CalendarX2 },
             { id: 'gradebooks', label: `دفاتر الدرجات (${sectionSubjects.length})`, icon: BookOpen },
+            { id:'rank',label:'المتميزون والمتابعة',icon:UserCheck },
+            { id:'cases',label:'حالة الطلاب',icon:Users },
+            { id:'room',label:'حالة الصف',icon:BookOpen },
+            { id:'mail',label:'سجل رسائل الطلاب',icon:Edit3 },
+            { id:'notices',label:'تبليغات المدير',icon:BookOpen },
             { id: 'import_pdf', label: 'الاستيراد الذكي وتصدير A4', icon: FileSpreadsheet },
           ] as { id: CounselorTab; label: string; icon: React.ComponentType<{ className?: string }> }[]
         ).map((tab) => {
@@ -458,8 +460,11 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
             </button>
           );
         })}
-      </div>
-
+      </div>}
+      {activeTab === 'rank' && <Rankings students={sectionStudents} subjects={sectionSubjects} sections={[section]} />}
+      {activeTab === 'room' && <Observations key={section.id+'-class'} section={section} students={sectionStudents} personal={false} refresh={onWorkspaceRefresh}/>}
+      {activeTab === 'cases' && <><StaffPanel mode="cases" workspace={workspace} section={section} refresh={onWorkspaceRefresh}/><Observations key={section.id+'-students'} section={section} students={sectionStudents} personal refresh={onWorkspaceRefresh}/></>}
+      {(activeTab === 'mail' || activeTab === 'notices') && <StaffPanel key={activeTab} mode={activeTab} workspace={workspace} section={section} refresh={onWorkspaceRefresh}/>}
       {error && (
         <div role="alert" className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-xs sm:text-sm text-red-700 dark:text-red-300">
           {error}

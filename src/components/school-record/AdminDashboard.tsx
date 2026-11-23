@@ -1,3 +1,4 @@
+import { StaffPanel } from './StaffPanel';
 import { Rankings } from './SectionInsights';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -67,7 +68,7 @@ interface AdminDashboardProps {
   onLogout: () => Promise<void>;
 }
 
-type AdminTab = 'profile' | 'structure' | 'audit_backup';
+type AdminTab = 'profile' | 'structure' | 'audit_backup' | 'notices';
 
 function compressImageFile(file: File, maxDim: number, maxKb: number): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -538,6 +539,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {(
           [
             { id: 'structure', label: 'الصفوف والشعب والمرشدون', icon: Layers },
+            { id:'notices',label:'تبليغات المرشدين',icon:BookOpen },
             { id: 'profile', label: 'ملف المدرسة', icon: Building2 },
             { id: 'audit_backup', label: 'سجل التدقيق والنسخ الاحتياطي والأمان', icon: History },
           ] as { id: AdminTab; label: string; icon: React.ComponentType<{ className?: string }> }[]
@@ -624,6 +626,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* TAB 1: SCHOOL PROFILE */}
+      {activeTab === 'notices' && <StaffPanel mode="admin" workspace={workspace} refresh={onWorkspaceRefresh}/>}
       {activeTab === 'profile' && (
         <div className="max-w-3xl mx-auto">
           {/* School Profile Form */}
