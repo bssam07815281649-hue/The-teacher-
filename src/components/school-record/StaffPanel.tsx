@@ -40,9 +40,14 @@ export function StaffPanel({mode, workspace, section, refresh}: Props) {
       </form>}
       {mode==='admin' && <h3 className="border-t pt-4 text-base font-extrabold">البلاغات السابقة</h3>}
       {!workspace.announcements.some(a=>a.visibility==='internal') && <p className="text-sm text-slate-500">لا توجد بلاغات.</p>}
-      <div className="space-y-3">
-        {workspace.announcements.filter(a=>a.visibility==='internal')
-          .slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt))
+      <div className="space-y-5">
+        {(mode === 'admin'
+          ? [{ title: '', notices: workspace.announcements.filter(a=>a.visibility==='internal') }]
+          : [{ title: 'بلاغات جديدة', notices: workspace.announcements.filter(a=>a.visibility==='internal' && section && !a.readBy?.[section.id]) },
+             { title: 'البلاغات السابقة', notices: workspace.announcements.filter(a=>a.visibility==='internal' && section && !!a.readBy?.[section.id]) }]
+        ).map(group=><section key={group.title || 'all'} className="space-y-3">
+          {group.title && <h3 className="font-bold text-violet-800 dark:text-violet-300">{group.title} ({group.notices.length})</h3>}
+          {group.notices.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt))
           .map(a=>{
             const readBy=a.readBy||{};
             const readSections=workspace.sections.filter(sec=>Boolean(readBy[sec.id]));
@@ -69,6 +74,7 @@ export function StaffPanel({mode, workspace, section, refresh}: Props) {
               </div>}
             </article>;
           })}
+        </section>)}
       </div>
     </div>}
     {status && <p role="status">{status}</p>}
