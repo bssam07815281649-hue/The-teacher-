@@ -118,6 +118,18 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
     window.addEventListener('offline',refreshStatus);
     return ()=>{alive=false;window.removeEventListener(SCHOOL_OFFLINE_STATUS_EVENT,refreshStatus);window.removeEventListener('online',refreshStatus);window.removeEventListener('offline',refreshStatus);};
   },[workspace.session.schoolId,workspace.session.sectionId]);
+  useEffect(() => {
+    const refresh = () => { if(navigator.onLine) void onWorkspaceRefresh(); };
+    window.addEventListener('online', refresh);
+    window.addEventListener('focus', refresh);
+    const timer = window.setInterval(refresh, 60_000);
+    return () => {
+      window.removeEventListener('online', refresh);
+      window.removeEventListener('focus', refresh);
+      window.clearInterval(timer);
+    };
+  }, [onWorkspaceRefresh]);
+
   const handleSynchronize=async()=>{
     if(syncing)return;
     if(!navigator.onLine){setError('لا يوجد اتصال بالإنترنت. التعديلات المحلية محفوظة على الجهاز ويمكن مزامنتها عند عودة الاتصال.');return;}
