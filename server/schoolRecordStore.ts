@@ -561,6 +561,17 @@ export class SchoolRecordStore {
     return `${encoded}.${sig}`;
   }
 
+  public renewRememberedSchoolSession(token: string): string | null {
+    const session = this.verifySessionToken(token);
+    if (!session || session.role === 'admin') return null;
+    try {
+      const payload = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString('utf-8')) as SessionTokenPayload;
+      payload.iat = Date.now();
+      payload.exp = Date.now() + 30 * 24 * 60 * 60 * 1000;
+      return this.signSessionToken(payload);
+    } catch { return null; }
+  }
+
   public verifySessionToken(token: string): SchoolSessionUser | null {
     if (!token || !token.includes('.')) return null;
     const parts = token.split('.');
