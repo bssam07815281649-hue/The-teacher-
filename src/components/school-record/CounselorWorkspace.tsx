@@ -439,14 +439,20 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span role="status" className={'rounded-xl border px-3 py-2 text-xs font-bold ' + (syncStatus?.pendingCount ? 'border-amber-300 bg-amber-50 text-amber-800' : syncStatus?.online ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-slate-300 bg-slate-100 text-slate-700')}>
-            {syncStatus?.pendingCount ? `غير مزامن · ${syncStatus.pendingCount} تعديل` : syncStatus?.online && syncStatus.lastServerSyncAt ? 'مزامن مع الخادم' : syncStatus?.online ? 'بانتظار أول مزامنة' : 'غير متصل'}
-          </span>
-          <span className="text-[11px] text-slate-500 dark:text-slate-400">آخر مزامنة: {syncStatus?.lastServerSyncAt ? new Date(syncStatus.lastServerSyncAt).toLocaleString('ar-IQ') : 'لم تتم بعد'}</span>
-          <button type="button" onClick={()=>void handleSynchronize()} disabled={syncing}
-            className="min-h-[40px] rounded-xl bg-[#653CF5] px-4 py-2 text-xs font-bold text-white disabled:opacity-60">
-            {syncing?'جاري المزامنة…':'مزامنة الآن'}
-          </button>
+          {workspace.session.role === 'admin' ? (
+            <span role="status" className="rounded-xl bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800 dark:bg-slate-800 dark:text-violet-300">
+              آخر حفظ وصل من مرشد الشعبة: {section.lastCounselorSavedAt ? new Date(section.lastCounselorSavedAt).toLocaleString('ar-IQ') : 'لا توجد تعديلات مؤكدة بعد'}
+            </span>
+          ) : <>
+            <span role="status" className={'rounded-xl border px-3 py-2 text-xs font-bold ' + (syncStatus?.pendingCount ? 'border-amber-300 bg-amber-50 text-amber-800' : syncStatus?.online && syncStatus.lastServerSyncAt ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-slate-300 bg-slate-100 text-slate-700')}>
+              {syncStatus?.pendingCount ? `غير مزامن · ${syncStatus.pendingCount} تعديل` : syncStatus?.online && syncStatus.lastServerSyncAt ? 'مزامن مع الخادم' : syncStatus?.online ? 'بانتظار أول مزامنة' : 'غير متصل'}
+            </span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">آخر مزامنة: {syncStatus?.lastServerSyncAt ? new Date(syncStatus.lastServerSyncAt).toLocaleString('ar-IQ') : 'لم تتم بعد'}</span>
+            <button type="button" onClick={()=>void handleSynchronize()} disabled={syncing}
+              className="min-h-[40px] rounded-xl bg-[#653CF5] px-4 py-2 text-xs font-bold text-white disabled:opacity-60">
+              {syncing?'جاري المزامنة…':'مزامنة الآن'}
+            </button>
+          </>}
           <button
             type="button"
             onClick={() => void onWorkspaceRefresh()}
