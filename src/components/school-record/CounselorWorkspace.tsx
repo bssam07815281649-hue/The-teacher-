@@ -440,7 +440,7 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
 
         <div className="flex flex-wrap items-center gap-2">
           <span role="status" className={'rounded-xl border px-3 py-2 text-xs font-bold ' + (syncStatus?.pendingCount ? 'border-amber-300 bg-amber-50 text-amber-800' : syncStatus?.online ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-slate-300 bg-slate-100 text-slate-700')}>
-            {syncStatus?.pendingCount ? `غير مزامن · ${syncStatus.pendingCount} تعديل` : syncStatus?.online ? 'مزامن مع الخادم' : 'غير متصل'}
+            {syncStatus?.pendingCount ? `غير مزامن · ${syncStatus.pendingCount} تعديل` : syncStatus?.online && syncStatus.lastServerSyncAt ? 'مزامن مع الخادم' : syncStatus?.online ? 'بانتظار أول مزامنة' : 'غير متصل'}
           </span>
           <span className="text-[11px] text-slate-500 dark:text-slate-400">آخر مزامنة: {syncStatus?.lastServerSyncAt ? new Date(syncStatus.lastServerSyncAt).toLocaleString('ar-IQ') : 'لم تتم بعد'}</span>
           <button type="button" onClick={()=>void handleSynchronize()} disabled={syncing}
