@@ -204,6 +204,13 @@ export function createSchoolRecordRouter(
     }
   });
 
+  router.post('/announcements/:id/read', requireSchoolSession, requireRoles(['counselor']), (req: SchoolAuthedRequest, res) => {
+    try {
+      const announcement = store.acknowledgeAnnouncement(req.schoolSession!, String(req.params.id));
+      res.json({ announcement });
+    } catch (err) { sendError(res, err); }
+  });
+
   router.post('/stages', requireSchoolSession, requireRoles(['admin']), (req: SchoolAuthedRequest, res) => {
     try {
       const stage = store.upsertStage(req.schoolSession!, req.body || {});
