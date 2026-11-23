@@ -48,9 +48,22 @@ export function createSchoolRecordRouter(
 ): Router {
   const router = Router();
 
+  const sessionCookieName = 'school_record_session';
+  const sessionCookieOptions = {
+    httpOnly: true,
+    sameSite: 'strict' as const,
+    secure: process.env.NODE_ENV === 'production',
+    path: '/api/school-record',
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  };
+  const readSessionCookie = (req: Request) => {
+    const cookie = (req.headers.cookie || '').split('; ').find(c => c.startsWith(sessionCookieName + '='));
+    return cookie ? decodeURIComponent(cookie.slice(sessionCookieName.length + 1)) : '';
+  };
+
   const requireSchoolSession = (req: SchoolAuthedRequest, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : readSessionCookie(req);
     const session = store.verifySessionToken(token);
     if (!session) {
       res.status(401).json({ error: 'انتهت الجلسة أو تم تغيير/إبطال الكود. يرجى تسجيل الدخول بالكود مجدداً.' });
@@ -85,6 +98,8 @@ export function createSchoolRecordRouter(
       const { code } = (req.body || {}) as { code?: string };
       const clientKey = String(req.ip || req.socket.remoteAddress || 'unknown');
       const result = await store.loginWithCode(String(code || ''), clientKey);
+      // Never store admin code-only sessions persistently.
+      if (result.session.role !== 'admin') res.cookie(sessionCookieName, result.token, sessionCookieOptions);
       res.json(result);
     } catch (err) {
       sendError(res, err);
@@ -124,9 +139,12 @@ export function createSchoolRecordRouter(
     }
   });
 
-  router.post('/auth/logout', requireSchoolSession, (req: SchoolAuthedRequest, res) => {
+  router.post('/auth/logout', (req: SchoolAuthedRequest, res) => {
     try {
-      store.recordLogout(req.schoolSession!);
+      res.clearCookie(sessionCookieName, sessionCookieOptions);
+      const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : readSessionCookie(req);
+      const session = store.verifySessionToken(token);
+      if (session) store.recordLogout(session);
       res.json({ ok: true });
     } catch (err) {
       sendError(res, err);
