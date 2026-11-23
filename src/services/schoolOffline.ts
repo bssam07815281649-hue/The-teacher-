@@ -120,7 +120,7 @@ export async function getOfflineStatus(session?: SchoolSessionUser): Promise<Sch
     online: navigator.onLine,
     pendingCount: pending.length,
     lastServerSyncAt: cached?.lastServerSyncAt || '',
-    conflictCount: 0,
+    conflictCount: key ? await readStore<number>('meta', 'conflicts:' + key) || 0 : 0,
   };
 }
 export async function clearOfflineSchoolCache() {
@@ -175,7 +175,7 @@ export async function saveGradeEditOffline(
     }
     pending.put({id: crypto.randomUUID(), key, sectionId, subjectId, createdAt: new Date().toISOString(),
       updates, originals} satisfies PendingGradeWrite);
-    snapshots.put(cached);
+    snapshots.put(cached as CachedWorkspace);
     await txDone(tx);
     announce();
     return subject;
@@ -217,6 +217,7 @@ export async function synchronizeGradeEdits(
     if (!subject) continue;
     for (const u of op.updates) subject.cells[makeCellKey(u.studentId,u.columnId)]={...u.value};
   }
+  await putStore('meta', conflictCount, 'conflicts:' + key);
   await cacheSchoolWorkspace(workspace, left.length===0);
   return {workspace, conflictCount, pendingCount:left.length};
 }
