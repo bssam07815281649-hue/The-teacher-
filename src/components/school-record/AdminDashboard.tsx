@@ -1,3 +1,4 @@
+import { Rankings } from './SectionInsights';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown,
@@ -868,11 +869,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             ) : (
               <div className="space-y-2">
                 {sortedStages.map((stg, idx) => {
-                  const stageSecsCount = workspace.sections.filter((s) => s.stageId === stg.id).length;
+                  const stageSections = workspace.sections.filter(s => s.stageId === stg.id);
+                  const sectionIds = new Set(stageSections.map(s => s.id));
+                  const stageSecsCount = stageSections.length;
                   return (
                     <div
                       key={stg.id}
-                      className="p-3 rounded-xl bg-[#F7F7FC] dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2"
+                      className="flex-wrap p-3 rounded-xl bg-[#F7F7FC] dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2"
                     >
                       {editingStage?.id === stg.id ? (
                         <div className="flex-1 flex items-center gap-2">
@@ -963,6 +966,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                         </>
                       )}
+                      <div className="w-full"><Rankings sections={stageSections} students={workspace.students.filter(s=>sectionIds.has(s.sectionId))} subjects={workspace.subjects.filter(s=>sectionIds.has(s.sectionId))}/></div>
                     </div>
                   );
                 })}

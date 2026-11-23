@@ -355,6 +355,10 @@ export async function deleteSubjectApi(sectionId: string, subjectId: string): Pr
   await apiRequest(`/sections/${sectionId}/subjects/${subjectId}`, { method: 'DELETE' });
 }
 
+export function addSectionObservation(sectionId: string, input: {studentId?: string; category: string; note: string}) {
+  return apiRequest(`/sections/${sectionId}/observations`, {method:'POST', body:JSON.stringify(input)});
+}
+
 export function releaseGrades(sectionId: string, subjectId: string, period: 'term1' | 'midyear' | 'term2', approve: boolean) {
   return apiRequest(`/sections/${sectionId}/subjects/${subjectId}/release`, {
     method: 'POST', body: JSON.stringify({ period, approve }),

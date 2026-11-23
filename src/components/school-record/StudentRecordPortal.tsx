@@ -1,3 +1,4 @@
+import { publishedAverage } from '../../utils/publishedAverage';
 import React, { useEffect, useState } from 'react';
 import type { Book, GradePeriodId, ReleasedPeriod, SchoolWorkspacePayload, SubjectGradebook } from '../../types';
 import { formatCellDisplay, makeCellKey } from '../../utils/gradeCalculations';
@@ -71,11 +72,7 @@ export function StudentRecordPortal({ workspace, onLogout, onWorkspaceRefresh }:
   const student = workspace.students[0];
   if (!student) return <p>تعذر تحميل بيانات الطالب.</p>;
   const id = student.id, subjects = workspace.subjects;
-  const general = mean(subjects.flatMap(subject => {
-    const marks = periods.flatMap(p => entries(subject.releases?.[p.id], id).flatMap(e => e.percent == null ? [] : [e.percent]));
-    const value = mean(marks);
-    return value == null ? [] : [value];
-  }));
+  const general = publishedAverage(subjects, id);
   function toggle(period: typeof open) {
     setOpen(open === period ? null : period);
     selectSubject('');

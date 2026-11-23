@@ -284,7 +284,16 @@ export interface SchoolStageGrade {
   orderIndex: number;
 }
 
+export interface SectionObservation {
+  id: string;
+  studentId?: string;
+  category: string;
+  note: string;
+  createdAt: string;
+}
+
 export interface SchoolSection {
+  observations?: SectionObservation[];
   id: string;
   stageId: string;
   name: string;

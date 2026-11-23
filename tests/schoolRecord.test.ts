@@ -384,6 +384,14 @@ test('Server security, RBAC scope isolation, session revocation, rate limiting, 
     assert.equal((await release(cslAToken,true)).status,200);
     assert.equal((await readStudentSubject()).releases.term1.official[stu1Id],90);
 
+    const notesPath = `/sections/${secAId}/observations`;
+    assert.equal((await apiJson(baseUrl, notesPath, {method:'POST',token:stuToken,body:{category:'test'}})).status,403);
+    assert.equal((await apiJson(baseUrl, notesPath, {method:'POST',token:cslAToken,body:{studentId:stu1Id,category:'متابعة',note:'ملاحظة اختبار'}})).status,200);
+    assert.equal((await apiJson(baseUrl, notesPath, {method:'POST',token:cslAToken,body:{category:'النظافة جيدة'}})).status,200);
+    const staffNotes = (await apiJson(baseUrl,'/workspace',{token:cslAToken})).data.sections[0].observations;
+    assert.equal(staffNotes.length,2);
+    const privateView = (await apiJson(baseUrl,'/workspace',{token:stuToken})).data.sections[0];
+    assert.equal(privateView.observations,undefined);
     // Verify role-scoped code visibility BEFORE revoking counselor A
     const adminWsCheck = await apiJson(baseUrl, '/workspace', { token: adminToken });
     assert.equal(adminWsCheck.status, 200);

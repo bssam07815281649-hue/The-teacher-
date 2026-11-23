@@ -1,3 +1,4 @@
+import { Rankings, Observations } from './SectionInsights';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
@@ -426,6 +427,9 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
         </div>
       </div>
 
+      <Rankings students={sectionStudents} subjects={sectionSubjects} sections={[section]} />
+      <Observations key={section.id+'-students'} section={section} students={sectionStudents} personal refresh={onWorkspaceRefresh}/>
+      <Observations key={section.id+'-class'} section={section} students={sectionStudents} personal={false} refresh={onWorkspaceRefresh}/>
       {/* Counselor Sub-tabs */}
       <div className="flex flex-wrap gap-2">
         {(

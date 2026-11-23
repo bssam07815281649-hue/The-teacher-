@@ -855,10 +855,11 @@ export class SchoolRecordStore {
     return { token, session, isNewSchool };
   }
 
-  private sanitizeSection(sec: InternalSection, includeAccessCode = false): SchoolSection {
+  private sanitizeSection(sec: InternalSection, includeAccessCode = false, includeObservations = false): SchoolSection {
     return {
       id: sec.id,
       stageId: sec.stageId,
+      ...(includeObservations ? { observations: sec.observations || [] } : {}),
       name: sec.name,
       counselorName: sec.counselorName,
       counselorCodeStatus: sec.counselorCodeStatus,
@@ -903,7 +904,7 @@ export class SchoolRecordStore {
         stages: sortedStages,
         sections: [...tenant.sections]
           .sort((a, b) => a.orderIndex - b.orderIndex)
-          .map((s) => this.sanitizeSection(s, true)),
+          .map((s) => this.sanitizeSection(s, true, true)),
         students: tenant.students.map((st) => this.sanitizeStudent(st, true)),
         absences: [...tenant.absences].sort((a, b) => b.date.localeCompare(a.date)),
         subjects: tenant.subjects.map((sb) => ({ ...sb })),
@@ -924,7 +925,7 @@ export class SchoolRecordStore {
         stages: sortedStages,
         sections: tenant.sections
           .filter((s) => s.id === secId)
-          .map((s) => this.sanitizeSection(s, false)),
+          .map((s) => this.sanitizeSection(s, false, true)),
         students: tenant.students
           .filter((st) => st.sectionId === secId)
           .map((st) => this.sanitizeStudent(st, true)),
@@ -1583,12 +1584,29 @@ export class SchoolRecordStore {
     return this.sanitizeStudent(created, true);
   }
 
+  public addObservation(session: SchoolSessionUser, sectionId: string, input: {studentId?: string; category?: string; note?: string}) {
+    const tenant = this.assertSectionManager(session, sectionId);
+    const section = tenant.sections.find(s => s.id === sectionId);
+    if (!section) throw new SchoolRecordError(404, 'الشعبة غير موجودة.');
+    const category = input.category?.trim(), note = input.note?.trim() || '';
+    if (!category || category.length > 100 || note.length > 2000)
+      throw new SchoolRecordError(400, 'تحقق من عنوان الحالة وطول الملاحظة.');
+    if (input.studentId !== undefined && !tenant.students.some(s => s.id === input.studentId && s.sectionId === sectionId))
+      throw new SchoolRecordError(400, 'اختر طالباً من الشعبة.');
+    const observation = {id: makeId('obs'), studentId: input.studentId, category, note, createdAt: new Date().toISOString()};
+    section.observations = [...(section.observations || []), observation];
+    this.appendAudit(tenant, {name:session.displayName, role:session.role}, 'إضافة ملاحظة', 'section', sectionId, section.name, '', observation.id);
+    this.persist();
+  }
+
   public deleteStudent(session: SchoolSessionUser, sectionId: string, studentId: string) {
     const tenant = this.assertSectionManager(session, sectionId);
     const idx = tenant.students.findIndex((st) => st.id === studentId && st.sectionId === sectionId);
     if (idx === -1) throw new SchoolRecordError(404, 'الطالب غير موجود في هذه الشعبة.');
     const removed = tenant.students[idx];
     tenant.students.splice(idx, 1);
+    const section = tenant.sections.find(s => s.id === sectionId);
+    if (section?.observations) section.observations = section.observations.filter(n => n.studentId !== studentId);
     tenant.absences = tenant.absences.filter((ab) => ab.studentId !== studentId);
     const prefix = `${studentId}::`;
     for (const subj of tenant.subjects) {
@@ -2448,7 +2466,7 @@ export class SchoolRecordStore {
       school: tenant.school,
       announcements: tenant.announcements,
       stages: tenant.stages,
-      sections: tenant.sections.map((s) => this.sanitizeSection(s)),
+      sections: tenant.sections.map((s) => this.sanitizeSection(s, false, true)),
       students: tenant.students.map((st) => this.sanitizeStudent(st)),
       absences: tenant.absences,
       subjects: tenant.subjects,
