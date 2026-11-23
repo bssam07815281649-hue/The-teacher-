@@ -124,7 +124,6 @@ export async function loginSchoolWithGoogleAdmin(input: {
 }
 
 export async function logoutSchoolSession(): Promise<void> {
-  if (!inMemoryToken) return;
   try {
     await apiRequest('/auth/logout', { method: 'POST' }, true);
   } catch {
@@ -136,6 +135,17 @@ export async function logoutSchoolSession(): Promise<void> {
 
 export async function acknowledgeSchoolNotice(announcementId: string): Promise<void> {
   await apiRequest(`/announcements/${encodeURIComponent(announcementId)}/read`, { method: 'POST' });
+}
+
+// Resumes a same-device HttpOnly session without storing bearer tokens in Web Storage.
+export async function resumeSchoolSession(): Promise<SchoolSessionUser | null> {
+  try {
+    const result = await apiRequest<{ session: SchoolSessionUser }>('/auth/me', { method: 'GET' }, false);
+    if (result.session.role === 'counselor' || result.session.role === 'student') return result.session;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchSchoolWorkspace(): Promise<SchoolWorkspacePayload> {
