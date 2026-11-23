@@ -3,8 +3,8 @@ import type { SchoolSection, SchoolWorkspacePayload } from '../../types';
 import { acknowledgeSchoolNotice, saveSectionAction, upsertAnnouncementApi } from '../../services/schoolRecordClient';
 
 type Props = { mode: 'cases'|'mail'|'notices'|'admin'; workspace: SchoolWorkspacePayload; section?: SchoolSection; refresh: ()=>Promise<void> };
-const field = 'block w-full rounded-lg border bg-transparent p-3';
-const button = 'rounded-lg bg-violet-700 px-4 py-2 text-white disabled:opacity-50';
+const field = 'block w-full min-w-0 max-w-full rounded-lg border bg-transparent p-3';
+const button = 'w-full min-h-[44px] rounded-lg bg-violet-700 px-4 py-2 text-white disabled:opacity-50';
 export function StaffPanel({mode, workspace, section, refresh}: Props) {
   const [name,setName]=useState(''), [body,setBody]=useState(''), [target,setTarget]=useState('');
   const [ids,setIds]=useState<string[]>([]), [busy,setBusy]=useState(false), [status,setStatus]=useState('');
@@ -21,7 +21,7 @@ export function StaffPanel({mode, workspace, section, refresh}: Props) {
   return <section className="space-y-4 rounded-xl border p-4">
     {mode==='cases' && section && <>
       <h2 className="font-bold">حالات الطلاب</h2>
-      <form className="flex gap-2" onSubmit={e=>{e.preventDefault();void submit(async()=>{await saveSectionAction(section.id,'group',{name,studentIds:[]});setTarget(name.trim());});}}>
+      <form className="flex w-full min-w-0 flex-col gap-2" onSubmit={e=>{e.preventDefault();void submit(async()=>{await saveSectionAction(section.id,'group',{name,studentIds:[]});setTarget(name.trim());});}}>
         <input required maxLength={100} aria-label="اسم الحالة" placeholder="اسم الحالة الجديدة" className={field} value={name} onChange={e=>setName(e.target.value)}/><button className={button} disabled={busy}>إضافة</button>
       </form>
       <select aria-label="اختيار حالة" className={field} value={target} onChange={e=>{setTarget(e.target.value);setIds([]);}}><option value="">اختر الحالة</option>{section.caseGroups?.map(g=><option key={g.name}>{g.name}</option>)}</select>
