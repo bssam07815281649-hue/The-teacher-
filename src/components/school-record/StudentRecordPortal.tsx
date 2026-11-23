@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   BookOpen, CalendarDays, ChevronDown, ChevronUp, ClipboardList,
-  GraduationCap, LogOut, MessageSquareText, ShieldCheck, Sparkles,
+  GraduationCap, LogOut, MessageSquareText, Sparkles,
   TrendingUp, UserRound, Clock3,
 } from 'lucide-react';
 import type {
@@ -9,7 +9,6 @@ import type {
   SchoolWorkspacePayload, SubjectGradebook,
 } from '../../types';
 import { formatCellDisplay, makeCellKey } from '../../utils/gradeCalculations';
-import { publishedAverage } from '../../utils/publishedAverage';
 
 interface StudentRecordPortalProps {
   workspace: SchoolWorkspacePayload;
@@ -88,7 +87,6 @@ export function StudentRecordPortal({ workspace, onLogout, onWorkspaceRefresh }:
   const [openedPeriod, setOpenedPeriod] = useState<GradePeriodId>('term1');
   const [showMessages, setShowMessages] = useState(false);
   const [showAbsences, setShowAbsences] = useState(false);
-  const [showTrend, setShowTrend] = useState(false);
 
   useEffect(() => {
     let busy = false;
@@ -106,13 +104,9 @@ export function StudentRecordPortal({ workspace, onLogout, onWorkspaceRefresh }:
   const subjects = workspace.subjects;
   const studentId = student?.id || '';
   const currentAverage = useMemo(() => rawAverage(subjects, studentId), [subjects, studentId]);
-  const published = useMemo(() => publishedAverage(subjects, studentId), [subjects, studentId]);
   const completePursuits = useMemo(() =>
     subjects.map(subject => ({ subject, result: annualPursuit(subject, studentId) }))
       .filter(item => item.result !== null), [subjects, studentId]);
-  const allEntries = useMemo(() =>
-    subjects.flatMap(subject => periods.flatMap(p => savedGradeEntries(subject, studentId, p.id))),
-    [subjects, studentId]);
   const messages = workspace.sections.flatMap(section => section.messages || [])
     .slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   if (!student) return <p dir="rtl" className="p-6 text-center">تعذر تحميل بيانات الطالب.</p>;
@@ -146,21 +140,12 @@ export function StudentRecordPortal({ workspace, onLogout, onWorkspaceRefresh }:
         </div>
       </header>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className={surface + ' space-y-2 p-4 sm:p-5'}>
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400"><TrendingUp size={17} className="text-[#653CF5]"/> معدلك الحالي</div>
-          <div className="text-2xl font-extrabold text-[#4320D9] dark:text-violet-300">{percent(currentAverage)}</div>
-          <p className="text-[11px] text-slate-500">من كل الدرجات المحفوظة حتى الآن، غير رسمي</p>
-        </div>
-        <div className={surface + ' space-y-2 p-4 sm:p-5'}>
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400"><ClipboardList size={17} className="text-[#653CF5]"/> درجات مسجلة</div>
-          <div className="text-2xl font-extrabold text-[#4320D9] dark:text-violet-300">{number.format(allEntries.length)}</div>
-          <p className="text-[11px] text-slate-500">جميع المواد والفترات</p>
-        </div>
-        <div className={surface + ' col-span-2 space-y-2 p-4 sm:col-span-1 sm:p-5'}>
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400"><ShieldCheck size={17} className="text-[#653CF5]"/> معدل المنشور</div>
-          <div className="text-2xl font-extrabold text-[#4320D9] dark:text-violet-300">{percent(published)}</div>
-          <p className="text-[11px] text-slate-500">الدرجات التي نشرها المرشد فقط</p>
+      <div className={surface + ' p-4 sm:p-5'}>
+        <div className="flex items-center justify-between gap-3">
+          <div><p className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400"><TrendingUp size={18} className="text-[#653CF5]"/> معدلي الحالي</p>
+            <p className="mt-2 text-3xl font-extrabold text-[#4320D9] dark:text-violet-300">{percent(currentAverage)}</p>
+          </div>
+          <span className="rounded-xl bg-violet-50 px-3 py-2 text-xs text-violet-700 dark:bg-slate-800 dark:text-violet-300">معدل الدرجات المسجلة</span>
         </div>
       </div>
 
@@ -233,20 +218,6 @@ export function StudentRecordPortal({ workspace, onLogout, onWorkspaceRefresh }:
             <div key={subject.id} className="flex items-center justify-between rounded-xl bg-violet-50 px-4 py-3 dark:bg-slate-800">
               <span className="font-bold">{subject.name}</span><strong className="font-extrabold text-[#4320D9] dark:text-violet-300">{percent(result)}</strong>
             </div>)}</div>}
-      </section>
-
-      <section className={surface + ' overflow-hidden'}>
-        <button type="button" aria-expanded={showTrend} onClick={() => setShowTrend(!showTrend)} className="flex w-full items-center justify-between gap-2 px-4 py-4 text-right font-extrabold sm:px-6">
-          <span className="flex items-center gap-2"><TrendingUp size={19} className="text-[#653CF5]"/> تطور درجاتي</span>{showTrend ? <ChevronUp size={19}/> : <ChevronDown size={19}/>}
-        </button>
-        {showTrend && <div className="space-y-3 border-t p-4 sm:p-6">
-          {periods.map(p => {
-            const periodEntries = subjects.flatMap(s => savedGradeEntries(s, studentId, p.id));
-            const values = periodEntries.filter(e => e.value.status === 'score' && e.value.score !== null && e.maxScore > 0)
-              .map(e => 100 * e.value.score! / e.maxScore);
-            return <div key={p.id} className="flex items-center justify-between rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800"><span>{p.label}</span><strong>{percent(average(values))}</strong></div>;
-          })}
-        </div>}
       </section>
 
       <div className="grid gap-3 sm:grid-cols-2">
