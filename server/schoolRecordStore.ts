@@ -462,6 +462,16 @@ export class SchoolRecordStore {
       timestamp: nowIso(),
     };
     tenant.auditLogs.unshift(entry);
+    // Server-confirmed counselor edits, not merely local device saves.
+    if (actor.role === 'counselor' && !action.includes('دخول') && !action.includes('خروج')) {
+      const targetSectionId =
+        tenant.sections.find(sec => sec.id === targetId)?.id ||
+        tenant.students.find(st => st.id === targetId)?.sectionId ||
+        tenant.subjects.find(sub => sub.id === targetId)?.sectionId ||
+        tenant.absences.find(ab => ab.id === targetId)?.sectionId;
+      const section = tenant.sections.find(sec => sec.id === targetSectionId);
+      if (section) section.lastCounselorSavedAt = entry.timestamp;
+    }
     if (tenant.auditLogs.length > 1500) {
       tenant.auditLogs = tenant.auditLogs.slice(0, 1500);
     }
@@ -874,6 +884,7 @@ export class SchoolRecordStore {
       ...(includeObservations ? { observations: sec.observations || [], caseGroups: sec.caseGroups || [], messages: sec.messages || [] } : {}),
       name: sec.name,
       counselorName: sec.counselorName,
+      lastCounselorSavedAt: sec.lastCounselorSavedAt,
       counselorCodeStatus: sec.counselorCodeStatus,
       counselorCodeUpdatedAt: sec.counselorCodeUpdatedAt,
       ...(includeAccessCode && sec.counselorCred.status === 'active' && sec.counselorCred.displayCode
