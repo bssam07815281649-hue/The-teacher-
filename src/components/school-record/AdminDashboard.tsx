@@ -1049,7 +1049,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       className="p-4 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3"
                     >
                       {editingSection?.id === sec.id ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="grid min-w-0 grid-cols-1 gap-2">
                           <input
                             type="text"
                             value={editingSection.name}
@@ -1237,13 +1237,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       )}
 
                       {codeTargetSecId === sec.id && (
-                        <div className="p-3 rounded-xl bg-[#F7F7FC] dark:bg-slate-800 border border-[#653CF5]/30 flex flex-wrap items-center gap-2">
+                        <div className="w-full min-w-0 p-3 rounded-xl bg-[#F7F7FC] dark:bg-slate-800 border border-[#653CF5]/30 flex flex-col gap-2">
                           <input
                             type="text"
                             value={codeInput}
                             onChange={(e) => setCodeInput(e.target.value)}
                             placeholder="أدخل كود المرشد الجديد..."
-                            className="flex-1 min-w-[160px] min-h-[38px] px-3 rounded-lg bg-white dark:bg-slate-900 border text-xs font-mono-num font-bold"
+                            className="w-full min-w-0 min-h-[42px] px-3 rounded-lg bg-white dark:bg-slate-900 border text-xs font-mono-num font-bold"
                           />
                           <button
                             type="button"
