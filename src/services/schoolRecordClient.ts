@@ -21,6 +21,12 @@ import type {
   StudentAbsence,
   SubjectGradebook,
 } from '../types';
+import {
+  cacheSchoolWorkspace, canQueueOffline, clearOfflineSchoolCache,
+  getCachedSchoolSession, getCachedSchoolWorkspace, saveGradeEditOffline,
+  synchronizeGradeEdits, getOfflineStatus,
+} from './schoolOffline';
+
 
 // Strictly held in memory (never in localStorage or sessionStorage)
 let inMemoryToken: string | null = null;
@@ -124,6 +130,8 @@ export async function loginSchoolWithGoogleAdmin(input: {
 }
 
 export async function logoutSchoolSession(): Promise<void> {
+  // Keep pending offline marks intact: refuse logout until they reach the server.
+  await clearOfflineSchoolCache();
   try {
     await apiRequest('/auth/logout', { method: 'POST' }, true);
   } catch {
@@ -139,17 +147,48 @@ export async function acknowledgeSchoolNotice(announcementId: string): Promise<v
 
 // Resumes a same-device HttpOnly session without storing bearer tokens in Web Storage.
 export async function resumeSchoolSession(): Promise<SchoolSessionUser | null> {
+  if (!navigator.onLine) return getCachedSchoolSession();
   try {
     const result = await apiRequest<{ session: SchoolSessionUser }>('/auth/me', { method: 'GET' }, false);
     if (result.session.role === 'counselor' || result.session.role === 'student') return result.session;
     return null;
-  } catch {
-    return null;
+  } catch (err) {
+    return canQueueOffline(err) ? getCachedSchoolSession() : null;
   }
 }
 
 export async function fetchSchoolWorkspace(): Promise<SchoolWorkspacePayload> {
-  return apiRequest<SchoolWorkspacePayload>('/workspace', { method: 'GET' }, true);
+  if (!navigator.onLine) {
+    const cached = await getCachedSchoolWorkspace();
+    if (cached) return cached;
+    throw new Error('افتح سجلك بالإنترنت مرة واحدة حتى يُحفظ على الجهاز.');
+  }
+  try {
+    const remote = await apiRequest<SchoolWorkspacePayload>('/workspace', { method: 'GET' }, true);
+    if (remote.session.role === 'counselor') {
+      const result = await synchronizeGradeEdits(remote, (sectionId, subjectId, updates) =>
+        apiRequest(`/sections/${sectionId}/subjects/${subjectId}/cells`, {
+          method: 'POST', body: JSON.stringify({ updates }),
+        }));
+      return result.workspace;
+    }
+    await cacheSchoolWorkspace(remote, true).catch(err => console.warn('Offline cache unavailable', err));
+    return remote;
+  } catch (err) {
+    if (canQueueOffline(err)) {
+      const cached = await getCachedSchoolWorkspace();
+      if (cached) return cached;
+    }
+    throw err;
+  }
+}
+
+export async function synchronizeSchoolNow(): Promise<SchoolWorkspacePayload> {
+  return fetchSchoolWorkspace();
+}
+
+export async function pendingGradeChanges(): Promise<number> {
+  return (await getOfflineStatus()).pendingCount;
 }
 
 export async function updateSchoolProfileApi(updates: Partial<SchoolProfile>): Promise<SchoolProfile> {
@@ -388,14 +427,24 @@ export async function updateGradeCellsApi(
   subjectId: string,
   updates: { studentId: string; columnId: string; value: GradeCellValue }[]
 ): Promise<SubjectGradebook> {
-  const res = await apiRequest<{ subject: SubjectGradebook }>(
-    `/sections/${sectionId}/subjects/${subjectId}/cells`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ updates }),
+  if (!navigator.onLine) return saveGradeEditOffline(sectionId, subjectId, updates);
+  try {
+    // Existing offline updates must be reconciled first to preserve edit order.
+    if (await pendingGradeChanges()) {
+      await fetchSchoolWorkspace();
+      if (await pendingGradeChanges()) {
+        throw new Error('توجد تعديلات محلية تحتاج مراجعة قبل حفظ درجات جديدة.');
+      }
     }
-  );
-  return res.subject;
+    const res = await apiRequest<{ subject: SubjectGradebook }>(
+      `/sections/${sectionId}/subjects/${subjectId}/cells`,
+      { method: 'POST', body: JSON.stringify({ updates }) }
+    );
+    return res.subject;
+  } catch (err) {
+    if (canQueueOffline(err)) return saveGradeEditOffline(sectionId, subjectId, updates);
+    throw err;
+  }
 }
 
 export async function extractSheetWithAiApi(input: {
