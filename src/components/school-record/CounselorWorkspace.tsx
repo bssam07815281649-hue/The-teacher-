@@ -491,7 +491,7 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
           <span className="rounded-full bg-amber-200 px-2 py-1 text-xs dark:bg-amber-900">عرض البلاغات</span>
         </button>
       )}
-      {activeTab ? <button className="rounded-xl border p-3" onClick={()=>setActiveTab(null)}>→ قائمة الشعبة</button> : <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+      {activeTab ? <button className="rounded-xl border p-3" onClick={()=>setActiveTab(null)}>→ قائمة الشعبة</button> : <div className="grid min-w-0 grid-cols-1 min-[380px]:grid-cols-2 gap-3 md:grid-cols-3">
         {(
           [
             { id: 'students', label: `الطلاب والأكواد (${sectionStudents.length})`, icon: Users },
@@ -573,7 +573,7 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           <form
             onSubmit={handleAddStudent}
-            className="lg:col-span-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-3.5"
+            className="min-w-0 lg:col-span-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-3.5"
           >
             <h3 className="font-display font-bold text-base text-[#171A36] dark:text-white flex items-center gap-2">
               <UserPlus className="w-5 h-5 text-[#653CF5]" />
@@ -625,7 +625,7 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
             </button>
           </form>
 
-          <div className="lg:col-span-8 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
+          <div className="min-w-0 lg:col-span-8 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
             <div className="flex flex-col gap-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <h3 className="font-display font-bold text-base text-[#171A36] dark:text-white">
@@ -712,7 +712,7 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
                             <option value="transferred">منقول</option>
                             <option value="inactive">موقوف</option>
                           </select>
-                          <div className="sm:col-span-4 flex items-center gap-1.5">
+                          <div className="sm:col-span-4 flex flex-wrap items-center gap-1.5">
                             <button
                               type="button"
                               onClick={async () => {
@@ -939,7 +939,7 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div className="space-y-1">
                 <label className="block text-xs font-bold">التاريخ</label>
                 <input
