@@ -30,6 +30,7 @@ import {
 
 // Strictly held in memory (never in localStorage or sessionStorage)
 let inMemoryToken: string | null = null;
+const MANUAL_SIGNOUT_FLAG = 'school_record_manual_signout';
 let unauthorizedHandler: (() => void) | null = null;
 
 export function setSchoolUnauthorizedHandler(cb: (() => void) | null) {
@@ -109,6 +110,7 @@ export async function loginSchoolWithCode(code: string): Promise<{ token: string
     false
   );
   inMemoryToken = res.token;
+  localStorage.removeItem(MANUAL_SIGNOUT_FLAG);
   return res;
 }
 
@@ -126,12 +128,14 @@ export async function loginSchoolWithGoogleAdmin(input: {
     false
   );
   inMemoryToken = res.token;
+  localStorage.removeItem(MANUAL_SIGNOUT_FLAG);
   return res;
 }
 
 export async function logoutSchoolSession(): Promise<void> {
   // Keep pending offline marks intact: refuse logout until they reach the server.
   await clearOfflineSchoolCache();
+  localStorage.setItem(MANUAL_SIGNOUT_FLAG, '1');
   try {
     await apiRequest('/auth/logout', { method: 'POST' }, true);
   } catch {
@@ -147,6 +151,13 @@ export async function acknowledgeSchoolNotice(announcementId: string): Promise<v
 
 // Resumes a same-device HttpOnly session without storing bearer tokens in Web Storage.
 export async function resumeSchoolSession(): Promise<SchoolSessionUser | null> {
+  if (localStorage.getItem(MANUAL_SIGNOUT_FLAG) === '1') {
+    if (navigator.onLine) {
+      // Clear a same-origin HttpOnly cookie left by an offline manual logout.
+      await fetch('/api/school-record/auth/logout', {method:'POST'}).catch(()=>{});
+    }
+    return null;
+  }
   if (!navigator.onLine) return getCachedSchoolSession();
   try {
     const result = await apiRequest<{ session: SchoolSessionUser }>('/auth/me', { method: 'GET' }, false);
