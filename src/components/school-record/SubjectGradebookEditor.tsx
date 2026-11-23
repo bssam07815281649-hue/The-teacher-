@@ -548,7 +548,7 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
     return (
       <div className="space-y-3">
         {/* Add new column bar */}
-        <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-[#F7F7FC] dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
+        <div className="flex w-full min-w-0 flex-col gap-2 p-3 rounded-xl bg-[#F7F7FC] dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
           <input
             type="text"
             value={colInput.label}
@@ -559,7 +559,7 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
               }))
             }
             placeholder="عنوان العمود (مثال: يومي ١، شهر أول، إنشاء)"
-            className="flex-1 min-w-[160px] min-h-[38px] px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs"
+            className="w-full min-w-0 min-h-[40px] px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs"
           />
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-slate-500">العظمى:</span>
@@ -581,7 +581,7 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
             type="button"
             disabled={savingStructure}
             onClick={() => void handleAddColumn(targetRecId)}
-            className="min-h-[38px] px-3 rounded-lg bg-[#653CF5] hover:bg-[#4320D9] text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+            className="w-full min-h-[42px] px-3 rounded-lg bg-[#653CF5] hover:bg-[#4320D9] text-white text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>إضافة عمود</span>
@@ -826,18 +826,18 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
             })}
           </div>
 
-          <form onSubmit={handleCreateSubject} className="flex items-center gap-2">
+          <form onSubmit={handleCreateSubject} className="flex w-full min-w-0 flex-col gap-2.5">
             <input
               type="text"
               value={newSubjectName}
               onChange={(e) => setNewSubjectName(e.target.value)}
               placeholder="اسم مادة جديدة..."
-              className="min-h-[40px] px-3 rounded-xl bg-[#F7F7FC] dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm"
+              className="w-full min-w-0 min-h-[42px] px-3 rounded-xl bg-[#F7F7FC] dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm"
             />
             <button
               type="submit"
               disabled={savingStructure || !newSubjectName.trim()}
-              className="min-h-[40px] px-3.5 rounded-xl bg-[#171A36] hover:bg-[#4320D9] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              className="w-full min-h-[44px] px-3.5 rounded-xl bg-[#171A36] hover:bg-[#4320D9] text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               <Plus className="w-4 h-4" />
               <span>إنشاء دفتر مادة</span>
@@ -1183,19 +1183,19 @@ export const SubjectGradebookEditor: React.FC<SubjectGradebookEditorProps> = ({
 
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex w-full min-w-0 flex-col gap-2">
                     <input
                       type="text"
                       value={newSubRecordName}
                       onChange={(e) => setNewSubRecordName(e.target.value)}
                       placeholder="اكتب اسم السجل الجديد (مثال: الشهري، اليومي، النشاط...)"
-                      className="flex-1 min-w-[200px] min-h-[42px] px-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm"
+                      className="w-full min-w-0 min-h-[42px] px-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm"
                     />
                     <button
                       type="button"
                       disabled={savingStructure || !newSubRecordName.trim()}
                       onClick={() => void handleAddSubRecord(activeTab)}
-                      className="min-h-[42px] px-4 rounded-xl bg-[#653CF5] hover:bg-[#4320D9] text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      className="w-full min-h-[44px] px-4 rounded-xl bg-[#653CF5] hover:bg-[#4320D9] text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                     >
                       <Plus className="w-4 h-4" />
                       <span>إضافة سجل جديد</span>
