@@ -57,6 +57,7 @@ import {
   clearSchoolSessionToken,
   fetchSchoolWorkspace,
   logoutSchoolSession,
+  resumeSchoolSession,
   setSchoolUnauthorizedHandler,
 } from './services/schoolRecordClient';
 import {
@@ -257,6 +258,17 @@ export default function App() {
       setAuthReady(true);
     });
     return () => unsub();
+  }, []);
+
+  // Recover signed, revocable counselor/student sessions without a second code entry.
+  useEffect(() => {
+    let active = true;
+    void resumeSchoolSession().then(session => {
+      if (!active || !session) return;
+      setSchoolRole(session.role as 'counselor' | 'student');
+      setPortalOpen(false);
+    });
+    return () => { active = false; };
   }, []);
 
   // Load local guest profile automatically when open Guest Mode is active without Firebase user
