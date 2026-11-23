@@ -134,6 +134,10 @@ export async function logoutSchoolSession(): Promise<void> {
   }
 }
 
+export async function acknowledgeSchoolNotice(announcementId: string): Promise<void> {
+  await apiRequest(`/announcements/${encodeURIComponent(announcementId)}/read`, { method: 'POST' });
+}
+
 export async function fetchSchoolWorkspace(): Promise<SchoolWorkspacePayload> {
   return apiRequest<SchoolWorkspacePayload>('/workspace', { method: 'GET' }, true);
 }
