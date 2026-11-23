@@ -125,7 +125,7 @@ export async function getOfflineStatus(session?: SchoolSessionUser): Promise<Sch
 }
 export async function clearOfflineSchoolCache() {
   // Never discard unsynchronized edits on logout.
-  if ((await getOfflineStatus()).pendingCount) {
+  if ((await getPendingAll()).length) {
     throw new Error('توجد درجات محفوظة على الجهاز ولم تُزامن. زامنها قبل تسجيل الخروج.');
   }
   const db = await openDb();
