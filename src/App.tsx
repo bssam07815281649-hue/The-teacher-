@@ -57,6 +57,7 @@ import {
   clearSchoolSessionToken,
   fetchSchoolWorkspace,
   logoutSchoolSession,
+  resumeSchoolSession,
   setSchoolUnauthorizedHandler,
 } from './services/schoolRecordClient';
 import {
@@ -259,6 +260,17 @@ export default function App() {
     return () => unsub();
   }, []);
 
+  // Recover signed, revocable counselor/student sessions without a second code entry.
+  useEffect(() => {
+    let active = true;
+    void resumeSchoolSession().then(session => {
+      if (!active || !session) return;
+      setSchoolRole(session.role as 'counselor' | 'student');
+      setPortalOpen(false);
+    });
+    return () => { active = false; };
+  }, []);
+
   // Load local guest profile automatically when open Guest Mode is active without Firebase user
   useEffect(() => {
     if (!firebaseUser && guestMode) {
@@ -298,7 +310,8 @@ export default function App() {
   }, [schoolRole, loadSchoolWorkspace]);
 
   const handleSchoolLogout = useCallback(async () => {
-    await logoutSchoolSession();
+    try { await logoutSchoolSession(); }
+    catch (error) { window.alert(error instanceof Error ? error.message : 'تعذر تسجيل الخروج قبل مزامنة التعديلات المحلية.'); return; }
     clearSchoolSessionToken();
     setSchoolWorkspace(null);
     setSchoolRole(null);

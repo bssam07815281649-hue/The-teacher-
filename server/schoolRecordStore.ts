@@ -462,6 +462,16 @@ export class SchoolRecordStore {
       timestamp: nowIso(),
     };
     tenant.auditLogs.unshift(entry);
+    // Server-confirmed counselor edits, not merely local device saves.
+    if (actor.role === 'counselor' && !action.includes('دخول') && !action.includes('خروج')) {
+      const targetSectionId =
+        tenant.sections.find(sec => sec.id === targetId)?.id ||
+        tenant.students.find(st => st.id === targetId)?.sectionId ||
+        tenant.subjects.find(sub => sub.id === targetId)?.sectionId ||
+        tenant.absences.find(ab => ab.id === targetId)?.sectionId;
+      const section = tenant.sections.find(sec => sec.id === targetSectionId);
+      if (section) section.lastCounselorSavedAt = entry.timestamp;
+    }
     if (tenant.auditLogs.length > 1500) {
       tenant.auditLogs = tenant.auditLogs.slice(0, 1500);
     }
@@ -549,6 +559,17 @@ export class SchoolRecordStore {
       .update(encoded)
       .digest('base64url');
     return `${encoded}.${sig}`;
+  }
+
+  public renewRememberedSchoolSession(token: string): string | null {
+    const session = this.verifySessionToken(token);
+    if (!session || session.role === 'admin') return null;
+    try {
+      const payload = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString('utf-8')) as SessionTokenPayload;
+      payload.iat = Date.now();
+      payload.exp = Date.now() + 30 * 24 * 60 * 60 * 1000;
+      return this.signSessionToken(payload);
+    } catch { return null; }
   }
 
   public verifySessionToken(token: string): SchoolSessionUser | null {
@@ -684,7 +705,7 @@ export class SchoolRecordStore {
               sectionId: sec.id,
               sv: sec.counselorCred.sessionVersion,
               iat: Date.now(),
-              exp: Date.now() + 12 * 60 * 60 * 1000,
+              exp: Date.now() + 30 * 24 * 60 * 60 * 1000,
             });
             this.appendAudit(
               tenant,
@@ -730,7 +751,7 @@ export class SchoolRecordStore {
               studentId: student.id,
               sv: student.studentCred.sessionVersion,
               iat: Date.now(),
-              exp: Date.now() + 12 * 60 * 60 * 1000,
+              exp: Date.now() + 30 * 24 * 60 * 60 * 1000,
             });
             this.appendAudit(
               tenant,
@@ -874,6 +895,7 @@ export class SchoolRecordStore {
       ...(includeObservations ? { observations: sec.observations || [], caseGroups: sec.caseGroups || [], messages: sec.messages || [] } : {}),
       name: sec.name,
       counselorName: sec.counselorName,
+      lastCounselorSavedAt: sec.lastCounselorSavedAt,
       counselorCodeStatus: sec.counselorCodeStatus,
       counselorCodeUpdatedAt: sec.counselorCodeUpdatedAt,
       ...(includeAccessCode && sec.counselorCred.status === 'active' && sec.counselorCred.displayCode
@@ -1217,6 +1239,29 @@ export class SchoolRecordStore {
     );
     this.persist();
     return created;
+  }
+
+  public acknowledgeAnnouncement(session: SchoolSessionUser, announcementId: string): SchoolAnnouncement {
+    if (session.role !== 'counselor' || !session.sectionId) {
+      throw new SchoolRecordError(403, 'تأكيد قراءة البلاغ مخصص لمرشد الشعبة.');
+    }
+    const tenant = this.getTenantForSession(session);
+    const announcement = tenant.announcements.find(a => a.id === announcementId && a.visibility === 'internal');
+    if (!announcement) throw new SchoolRecordError(404, 'البلاغ غير موجود.');
+    const section = tenant.sections.find(s => s.id === session.sectionId);
+    if (!section || section.counselorCred.status !== 'active') {
+      throw new SchoolRecordError(403, 'صلاحية المرشد غير نشطة.');
+    }
+    announcement.readBy ??= {};
+    // Opening the notice only confirms the first read, not an unread count reset by refresh.
+    if (!announcement.readBy[section.id]) {
+      announcement.readBy[section.id] = {
+        counselorName: section.counselorName || session.displayName || 'مرشد الشعبة',
+        readAt: new Date().toISOString(),
+      };
+      this.persist();
+    }
+    return announcement;
   }
 
   public deleteAnnouncement(session: SchoolSessionUser, id: string) {

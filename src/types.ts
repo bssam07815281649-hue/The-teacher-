@@ -262,6 +262,8 @@ export interface SchoolAnnouncement {
   createdAt: string;
   updatedAt: string;
   authorName: string;
+  // Seen acknowledgements are keyed by counselor section, not a browser flag.
+  readBy?: Record<string, { counselorName: string; readAt: string }>;
 }
 
 export interface SchoolProfile {
@@ -300,6 +302,8 @@ export interface SchoolSection {
   stageId: string;
   name: string;
   counselorName: string;
+  /** Timestamp of a counselor edit confirmed and saved by the school server. */
+  lastCounselorSavedAt?: string;
   counselorCodeStatus: SchoolCodeStatus;
   counselorCodeUpdatedAt?: string;
   counselorAccessCode?: string;

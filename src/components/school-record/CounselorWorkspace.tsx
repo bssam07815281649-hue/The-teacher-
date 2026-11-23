@@ -42,6 +42,8 @@ import {
   upsertAbsenceApi,
   upsertStudentApi,
 } from '../../services/schoolRecordClient';
+import { getOfflineStatus, SCHOOL_OFFLINE_STATUS_EVENT, type SchoolOfflineStatus } from '../../services/schoolOffline';
+import { synchronizeSchoolNow } from '../../services/schoolRecordClient';
 import { generateStudentCodesA4Pdf, type A4PdfExportResult } from '../../services/a4PdfExport';
 import { SubjectGradebookEditor } from './SubjectGradebookEditor';
 import { SmartSheetImportWizard } from './SmartSheetImportWizard';
@@ -105,6 +107,46 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
   onLogout,
 }) => {
   const [activeTab, setActiveTab] = useState<CounselorTab | null>(null);
+  const [syncStatus,setSyncStatus] = useState<SchoolOfflineStatus|null>(null);
+  const [syncing,setSyncing] = useState(false);
+  useEffect(() => {
+    let alive=true;
+    const refreshStatus=()=>{void getOfflineStatus(workspace.session).then(status=>{if(alive)setSyncStatus(status);}).catch(()=>{});};
+    refreshStatus();
+    window.addEventListener(SCHOOL_OFFLINE_STATUS_EVENT,refreshStatus);
+    window.addEventListener('online',refreshStatus);
+    window.addEventListener('offline',refreshStatus);
+    return ()=>{alive=false;window.removeEventListener(SCHOOL_OFFLINE_STATUS_EVENT,refreshStatus);window.removeEventListener('online',refreshStatus);window.removeEventListener('offline',refreshStatus);};
+  },[workspace.session.schoolId,workspace.session.sectionId]);
+  useEffect(() => {
+    const refresh = () => { if(navigator.onLine) void onWorkspaceRefresh(); };
+    window.addEventListener('online', refresh);
+    window.addEventListener('focus', refresh);
+    const timer = window.setInterval(refresh, 60_000);
+    return () => {
+      window.removeEventListener('online', refresh);
+      window.removeEventListener('focus', refresh);
+      window.clearInterval(timer);
+    };
+  }, [onWorkspaceRefresh]);
+
+  const handleSynchronize=async()=>{
+    if(syncing)return;
+    if(!navigator.onLine){setError('لا يوجد اتصال بالإنترنت. التعديلات المحلية محفوظة على الجهاز ويمكن مزامنتها عند عودة الاتصال.');return;}
+    setSyncing(true);setError('');
+    try{
+      await synchronizeSchoolNow();
+      await onWorkspaceRefresh();
+      const state=await getOfflineStatus(workspace.session);
+      setSyncStatus(state);
+      if(state.conflictCount)setError('توجد درجات تغيّرت على الخادم أثناء انقطاع الإنترنت. احتفظنا بالتعديلات المحلية؛ راجع التعارض قبل إعادة إرسالها.');
+      else if(state.pendingCount)setError('بعض الدرجات لم تصل إلى الخادم بعد. أعد المحاولة عند استقرار الاتصال.');
+      else notify('تم إرسال التعديلات المعلقة إلى الخادم والتحقق من استلامها.');
+    }catch(err){setError(err instanceof Error?err.message:'تعذر المزامنة. الدرجات المحلية ما زالت محفوظة.');}
+    finally{setSyncing(false);}
+  };
+
+  const unreadNotices = workspace.announcements.filter(a => a.visibility === 'internal' && !a.readBy?.[sectionId]);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
   const [busy, setBusy] = useState(false);
@@ -397,6 +439,14 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <span role="status" className={'rounded-xl border px-3 py-2 text-xs font-bold ' + (syncStatus?.pendingCount ? 'border-amber-300 bg-amber-50 text-amber-800' : syncStatus?.online ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-slate-300 bg-slate-100 text-slate-700')}>
+            {syncStatus?.pendingCount ? `غير مزامن · ${syncStatus.pendingCount} تعديل` : syncStatus?.online && syncStatus.lastServerSyncAt ? 'مزامن مع الخادم' : syncStatus?.online ? 'بانتظار أول مزامنة' : 'غير متصل'}
+          </span>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">آخر مزامنة: {syncStatus?.lastServerSyncAt ? new Date(syncStatus.lastServerSyncAt).toLocaleString('ar-IQ') : 'لم تتم بعد'}</span>
+          <button type="button" onClick={()=>void handleSynchronize()} disabled={syncing}
+            className="min-h-[40px] rounded-xl bg-[#653CF5] px-4 py-2 text-xs font-bold text-white disabled:opacity-60">
+            {syncing?'جاري المزامنة…':'مزامنة الآن'}
+          </button>
           <button
             type="button"
             onClick={() => void onWorkspaceRefresh()}
@@ -428,6 +478,13 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
         </div>
       </div>
 
+      {unreadNotices.length > 0 && activeTab !== 'notices' && (
+        <button type="button" onClick={() => setActiveTab('notices')}
+          className="flex w-full items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-right text-sm font-bold text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+          <span>لديك {unreadNotices.length} من بلاغات المدير الجديدة</span>
+          <span className="rounded-full bg-amber-200 px-2 py-1 text-xs dark:bg-amber-900">عرض البلاغات</span>
+        </button>
+      )}
       {activeTab ? <button className="rounded-xl border p-3" onClick={()=>setActiveTab(null)}>→ قائمة الشعبة</button> : <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         {(
           [
@@ -438,7 +495,7 @@ export const CounselorWorkspace: React.FC<CounselorWorkspaceProps> = ({
             { id:'cases',label:'حالة الطلاب',icon:Users },
             { id:'room',label:'حالة الصف',icon:BookOpen },
             { id:'mail',label:'سجل رسائل الطلاب',icon:Edit3 },
-            { id:'notices',label:'تبليغات المدير',icon:BookOpen },
+            { id:'notices',label:unreadNotices.length ? `تبليغات المدير (${unreadNotices.length} جديد)` : 'تبليغات المدير',icon:BookOpen },
             { id: 'import_pdf', label: 'الاستيراد الذكي وتصدير A4', icon: FileSpreadsheet },
           ] as { id: CounselorTab; label: string; icon: React.ComponentType<{ className?: string }> }[]
         ).map((tab) => {
