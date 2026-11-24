@@ -1,5 +1,5 @@
 // Only cache public app-shell files. Never cache private school, auth or upload responses.
-const CACHE_NAME = 'smart-school-shell-v2';
+const CACHE_NAME = 'smart-school-shell-v3';
 
 function isSafeStaticUrl(url) {
   const u = new URL(url, self.location.href);
