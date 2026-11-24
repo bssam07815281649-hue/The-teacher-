@@ -22,19 +22,77 @@ import type {
   SubjectGradebook,
 } from '../types';
 import {
-  cacheSchoolWorkspace, canQueueOffline, clearOfflineSchoolCache,
-  getCachedSchoolSession, getCachedSchoolWorkspace, saveGradeEditOffline,
-  synchronizeGradeEdits, getOfflineStatus,
+  cacheSchoolWorkspace,
+  canQueueOffline,
+  clearOfflineSchoolCache,
+  getCachedSchoolSession,
+  getCachedSchoolWorkspace,
+  getOfflineStatus,
+  saveGradeEditOffline,
+  synchronizeGradeEdits,
 } from './schoolOffline';
+import {
+  clearCloudSessionState,
+  cloudAcknowledgeNotice,
+  cloudAddSectionObservation,
+  cloudBulkIssueStudentCodes,
+  cloudCommitSmartImport,
+  cloudDeleteAbsence,
+  cloudDeleteAnnouncement,
+  cloudDeleteImportTemplate,
+  cloudDeleteSection,
+  cloudDeleteStage,
+  cloudDeleteStudent,
+  cloudDeleteSubject,
+  cloudExportSanitizedBackup,
+  cloudFetchAuditLogs,
+  cloudFetchSchoolPublic,
+  cloudFetchWorkspace,
+  cloudLoginWithCode,
+  cloudLoginWithGoogleAdmin,
+  cloudLogoutSession,
+  cloudReleaseGrades,
+  cloudReorderStages,
+  cloudRestoreBackup,
+  cloudResumeSchoolSession,
+  cloudRotateAdminCode,
+  cloudSaveImportTemplate,
+  cloudSaveSectionAction,
+  cloudSetCounselorCode,
+  cloudSetStudentCode,
+  cloudUpdateFirebaseLink,
+  cloudUpdateGradeCells,
+  cloudUpdateSchoolProfile,
+  cloudUpsertAbsence,
+  cloudUpsertAnnouncement,
+  cloudUpsertSection,
+  cloudUpsertStage,
+  cloudUpsertStudent,
+  cloudUpsertSubject,
+  isCloudSessionActive,
+  setCloudUnauthorizedHandler,
+} from './schoolCloudAdapter';
+import { isBackendUnavailableResponse } from './schoolCloudShared';
 
+export { isBackendUnavailableResponse, isCloudSessionActive };
 
 // Strictly held in memory (never in localStorage or sessionStorage)
 let inMemoryToken: string | null = null;
 const MANUAL_SIGNOUT_FLAG = 'school_record_manual_signout';
 let unauthorizedHandler: (() => void) | null = null;
 
+export class BackendUnavailableError extends Error {
+  status: number;
+  constructor(status: number, message = 'خادم API غير متوفر على هذه الاستضافة.') {
+    super(message);
+    this.name = 'BackendUnavailableError';
+    this.status = status;
+  }
+}
+
 export function setSchoolUnauthorizedHandler(cb: (() => void) | null) {
   unauthorizedHandler = cb;
+  setCloudUnauthorizedHandler(cb);
 }
 
 export function getSchoolSessionToken(): string | null {
@@ -43,6 +101,7 @@ export function getSchoolSessionToken(): string | null {
 
 export function clearSchoolSessionToken() {
   inMemoryToken = null;
+  clearCloudSessionState();
 }
 
 async function apiRequest<T>(path: string, init: RequestInit = {}, authRequired = true): Promise<T> {
@@ -60,7 +119,13 @@ async function apiRequest<T>(path: string, init: RequestInit = {}, authRequired 
     headers,
   });
 
+  const contentType = resp.headers.get('content-type') || '';
   const rawText = await resp.text().catch(() => '');
+
+  if (isBackendUnavailableResponse(resp.status, rawText, contentType)) {
+    throw new BackendUnavailableError(resp.status);
+  }
+
   let parsed: ({ error?: string; retryAfterSeconds?: number } & T) | null = null;
   if (rawText) {
     try {
@@ -104,8 +169,39 @@ async function apiRequest<T>(path: string, init: RequestInit = {}, authRequired 
   return data;
 }
 
+async function runWithCloudFallback<T>(
+  cloudOp: () => Promise<T>,
+  serverOp: () => Promise<T>
+): Promise<T> {
+  if (isCloudSessionActive()) {
+    return cloudOp();
+  }
+  try {
+    return await serverOp();
+  } catch (err) {
+    if (err instanceof BackendUnavailableError) {
+      return cloudOp();
+    }
+    throw err;
+  }
+}
+
 export async function fetchSchoolPublic(): Promise<SchoolPublicPayload> {
-  return apiRequest<SchoolPublicPayload>('/public', { method: 'GET' }, false);
+  try {
+    const res = await apiRequest<SchoolPublicPayload>('/public', { method: 'GET' }, false);
+    if (res && res.school && res.school.name) {
+      return res;
+    }
+  } catch (err) {
+    if (!(err instanceof BackendUnavailableError)) {
+      try {
+        return await cloudFetchSchoolPublic();
+      } catch {
+        throw err;
+      }
+    }
+  }
+  return cloudFetchSchoolPublic();
 }
 
 export async function loginSchoolWithCode(code: string): Promise<{
@@ -113,25 +209,38 @@ export async function loginSchoolWithCode(code: string): Promise<{
   session: SchoolSessionUser;
   requiresGoogleAuth?: boolean;
 }> {
-  const res = await apiRequest<{
-    token: string;
-    session: SchoolSessionUser;
-    requiresGoogleAuth?: boolean;
-  }>(
-    '/auth/login',
-    {
-      method: 'POST',
-      body: JSON.stringify({ code }),
-    },
-    false
-  );
-  if (res.requiresGoogleAuth || res.session.role === 'admin' || !res.token) {
-    inMemoryToken = null;
-  } else {
-    inMemoryToken = res.token;
-    localStorage.removeItem(MANUAL_SIGNOUT_FLAG);
+  try {
+    const res = await apiRequest<{
+      token: string;
+      session: SchoolSessionUser;
+      requiresGoogleAuth?: boolean;
+    }>(
+      '/auth/login',
+      {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+      },
+      false
+    );
+    clearCloudSessionState();
+    if (res.requiresGoogleAuth || res.session.role === 'admin' || !res.token) {
+      inMemoryToken = null;
+    } else {
+      inMemoryToken = res.token;
+      localStorage.removeItem(MANUAL_SIGNOUT_FLAG);
+    }
+    return res;
+  } catch (err) {
+    if (err instanceof BackendUnavailableError) {
+      inMemoryToken = null;
+      const cloudRes = await cloudLoginWithCode(code);
+      if (!cloudRes.requiresGoogleAuth && cloudRes.session.role !== 'admin') {
+        localStorage.removeItem(MANUAL_SIGNOUT_FLAG);
+      }
+      return cloudRes;
+    }
+    throw err;
   }
-  return res;
 }
 
 export async function loginSchoolWithGoogleAdmin(input: {
@@ -139,59 +248,93 @@ export async function loginSchoolWithGoogleAdmin(input: {
   code?: string;
   initialCode?: string;
 }): Promise<{ token: string; session: SchoolSessionUser; isNewSchool?: boolean }> {
-  const res = await apiRequest<{ token: string; session: SchoolSessionUser; isNewSchool?: boolean }>(
-    '/auth/google-admin',
-    {
-      method: 'POST',
-      body: JSON.stringify(input),
-    },
-    false
-  );
-  inMemoryToken = res.token;
-  localStorage.removeItem(MANUAL_SIGNOUT_FLAG);
-  return res;
+  try {
+    const res = await apiRequest<{ token: string; session: SchoolSessionUser; isNewSchool?: boolean }>(
+      '/auth/google-admin',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+      false
+    );
+    clearCloudSessionState();
+    inMemoryToken = res.token;
+    localStorage.removeItem(MANUAL_SIGNOUT_FLAG);
+    return res;
+  } catch (err) {
+    if (err instanceof BackendUnavailableError) {
+      inMemoryToken = null;
+      const cloudRes = await cloudLoginWithGoogleAdmin({
+        code: input.code,
+        initialCode: input.initialCode,
+      });
+      localStorage.removeItem(MANUAL_SIGNOUT_FLAG);
+      return cloudRes;
+    }
+    throw err;
+  }
 }
 
 export async function logoutSchoolSession(options?: { isAdmin?: boolean }): Promise<void> {
   if (!options?.isAdmin) {
-    // Keep pending offline marks intact for counselors/students: refuse logout until synced.
+    // Keep pending offline marks intact for counselors/students: clear cache on manual logout.
     await clearOfflineSchoolCache();
     localStorage.setItem(MANUAL_SIGNOUT_FLAG, '1');
   }
-  try {
-    await apiRequest('/auth/logout', { method: 'POST' }, true);
-  } catch {
-    // Ignore logout network error
-  } finally {
-    inMemoryToken = null;
+  const wasCloud = isCloudSessionActive();
+  await cloudLogoutSession(options).catch(() => {});
+  if (!wasCloud) {
+    try {
+      await apiRequest('/auth/logout', { method: 'POST' }, true);
+    } catch {
+      // Ignore logout network / static host errors
+    }
   }
+  inMemoryToken = null;
 }
 
 export async function acknowledgeSchoolNotice(announcementId: string): Promise<void> {
-  await apiRequest(`/announcements/${encodeURIComponent(announcementId)}/read`, { method: 'POST' });
+  await runWithCloudFallback(
+    () => cloudAcknowledgeNotice(announcementId),
+    () => apiRequest(`/announcements/${encodeURIComponent(announcementId)}/read`, { method: 'POST' })
+  );
 }
 
-// Resumes a same-device HttpOnly session without storing bearer tokens in Web Storage.
+// Resumes a same-device HttpOnly session or cloud capability pointer without storing bearer tokens in Web Storage.
 export async function resumeSchoolSession(): Promise<SchoolSessionUser | null> {
   if (localStorage.getItem(MANUAL_SIGNOUT_FLAG) === '1') {
     if (navigator.onLine) {
-      // Clear a same-origin HttpOnly cookie left by an offline manual logout.
       await fetch('/api/school-record/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
     }
     return null;
   }
-  if (!navigator.onLine) return getCachedSchoolSession();
+  if (!navigator.onLine) {
+    return (await cloudResumeSchoolSession()) || getCachedSchoolSession();
+  }
   try {
     const result = await apiRequest<{ session: SchoolSessionUser }>('/auth/me', { method: 'GET' }, false);
-    if (result.session.role === 'counselor' || result.session.role === 'student') return result.session;
+    if (result.session?.role === 'counselor' || result.session?.role === 'student') {
+      return result.session;
+    }
     return null;
   } catch (err) {
-    return canQueueOffline(err) ? getCachedSchoolSession() : null;
+    if (err instanceof BackendUnavailableError) {
+      return cloudResumeSchoolSession();
+    }
+    if (canQueueOffline(err)) {
+      return (await cloudResumeSchoolSession()) || getCachedSchoolSession();
+    }
+    return null;
   }
 }
 
 export async function fetchSchoolWorkspace(): Promise<SchoolWorkspacePayload> {
+  if (isCloudSessionActive()) {
+    return cloudFetchWorkspace();
+  }
   if (!navigator.onLine) {
+    const cloudSess = await cloudResumeSchoolSession().catch(() => null);
+    if (cloudSess) return cloudFetchWorkspace();
     const cached = await getCachedSchoolWorkspace();
     if (cached) return cached;
     throw new Error('افتح سجلك بالإنترنت مرة واحدة حتى يُحفظ على الجهاز.');
@@ -201,13 +344,18 @@ export async function fetchSchoolWorkspace(): Promise<SchoolWorkspacePayload> {
     if (remote.session.role === 'counselor') {
       const result = await synchronizeGradeEdits(remote, (sectionId, subjectId, updates) =>
         apiRequest(`/sections/${sectionId}/subjects/${subjectId}/cells`, {
-          method: 'POST', body: JSON.stringify({ updates }),
-        }));
+          method: 'POST',
+          body: JSON.stringify({ updates }),
+        })
+      );
       return result.workspace;
     }
-    await cacheSchoolWorkspace(remote, true).catch(err => console.warn('Offline cache unavailable', err));
+    await cacheSchoolWorkspace(remote, true).catch((err) => console.warn('Offline cache unavailable', err));
     return remote;
   } catch (err) {
+    if (err instanceof BackendUnavailableError) {
+      return cloudFetchWorkspace();
+    }
     if (canQueueOffline(err)) {
       const cached = await getCachedSchoolWorkspace();
       if (cached) return cached;
@@ -225,19 +373,29 @@ export async function pendingGradeChanges(): Promise<number> {
 }
 
 export async function updateSchoolProfileApi(updates: Partial<SchoolProfile>): Promise<SchoolProfile> {
-  const res = await apiRequest<{ school: SchoolProfile }>('/school', {
-    method: 'PUT',
-    body: JSON.stringify(updates),
-  });
-  return res.school;
+  return runWithCloudFallback(
+    () => cloudUpdateSchoolProfile(updates),
+    async () => {
+      const res = await apiRequest<{ school: SchoolProfile }>('/school', {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      });
+      return res.school;
+    }
+  );
 }
 
 export async function rotateAdminCodeApi(newCode: string): Promise<void> {
-  await apiRequest('/admin/code', {
-    method: 'PUT',
-    body: JSON.stringify({ newCode }),
-  });
-  inMemoryToken = null;
+  await runWithCloudFallback(
+    () => cloudRotateAdminCode(newCode),
+    async () => {
+      await apiRequest('/admin/code', {
+        method: 'PUT',
+        body: JSON.stringify({ newCode }),
+      });
+      inMemoryToken = null;
+    }
+  );
 }
 
 export async function upsertAnnouncementApi(input: {
@@ -247,36 +405,56 @@ export async function upsertAnnouncementApi(input: {
   pinned?: boolean;
   visibility?: 'public' | 'internal';
 }): Promise<SchoolAnnouncement> {
-  const path = input.id ? `/announcements/${input.id}` : '/announcements';
-  const res = await apiRequest<{ announcement: SchoolAnnouncement }>(path, {
-    method: input.id ? 'PUT' : 'POST',
-    body: JSON.stringify(input),
-  });
-  return res.announcement;
+  return runWithCloudFallback(
+    () => cloudUpsertAnnouncement(input),
+    async () => {
+      const path = input.id ? `/announcements/${input.id}` : '/announcements';
+      const res = await apiRequest<{ announcement: SchoolAnnouncement }>(path, {
+        method: input.id ? 'PUT' : 'POST',
+        body: JSON.stringify(input),
+      });
+      return res.announcement;
+    }
+  );
 }
 
 export async function deleteAnnouncementApi(id: string): Promise<void> {
-  await apiRequest(`/announcements/${id}`, { method: 'DELETE' });
+  await runWithCloudFallback(
+    () => cloudDeleteAnnouncement(id),
+    () => apiRequest(`/announcements/${id}`, { method: 'DELETE' })
+  );
 }
 
 export async function upsertStageApi(input: { id?: string; name: string }): Promise<SchoolStageGrade> {
-  const path = input.id ? `/stages/${input.id}` : '/stages';
-  const res = await apiRequest<{ stage: SchoolStageGrade }>(path, {
-    method: input.id ? 'PUT' : 'POST',
-    body: JSON.stringify(input),
-  });
-  return res.stage;
+  return runWithCloudFallback(
+    () => cloudUpsertStage(input),
+    async () => {
+      const path = input.id ? `/stages/${input.id}` : '/stages';
+      const res = await apiRequest<{ stage: SchoolStageGrade }>(path, {
+        method: input.id ? 'PUT' : 'POST',
+        body: JSON.stringify(input),
+      });
+      return res.stage;
+    }
+  );
 }
 
 export async function reorderStagesApi(orderedStageIds: string[]): Promise<void> {
-  await apiRequest('/stages/reorder', {
-    method: 'POST',
-    body: JSON.stringify({ orderedStageIds }),
-  });
+  await runWithCloudFallback(
+    () => cloudReorderStages(orderedStageIds),
+    () =>
+      apiRequest('/stages/reorder', {
+        method: 'POST',
+        body: JSON.stringify({ orderedStageIds }),
+      })
+  );
 }
 
 export async function deleteStageApi(id: string): Promise<void> {
-  await apiRequest(`/stages/${id}`, { method: 'DELETE' });
+  await runWithCloudFallback(
+    () => cloudDeleteStage(id),
+    () => apiRequest(`/stages/${id}`, { method: 'DELETE' })
+  );
 }
 
 export async function upsertSectionApi(input: {
@@ -285,16 +463,24 @@ export async function upsertSectionApi(input: {
   name: string;
   counselorName: string;
 }): Promise<SchoolSection> {
-  const path = input.id ? `/sections/${input.id}` : '/sections';
-  const res = await apiRequest<{ section: SchoolSection }>(path, {
-    method: input.id ? 'PUT' : 'POST',
-    body: JSON.stringify(input),
-  });
-  return res.section;
+  return runWithCloudFallback(
+    () => cloudUpsertSection(input),
+    async () => {
+      const path = input.id ? `/sections/${input.id}` : '/sections';
+      const res = await apiRequest<{ section: SchoolSection }>(path, {
+        method: input.id ? 'PUT' : 'POST',
+        body: JSON.stringify(input),
+      });
+      return res.section;
+    }
+  );
 }
 
 export async function deleteSectionApi(id: string): Promise<void> {
-  await apiRequest(`/sections/${id}`, { method: 'DELETE' });
+  await runWithCloudFallback(
+    () => cloudDeleteSection(id),
+    () => apiRequest(`/sections/${id}`, { method: 'DELETE' })
+  );
 }
 
 export async function setCounselorCodeApi(
@@ -302,45 +488,81 @@ export async function setCounselorCodeApi(
   action: 'issue' | 'change' | 'revoke',
   code?: string
 ): Promise<SchoolSection> {
-  const res = await apiRequest<{ section: SchoolSection }>(`/sections/${sectionId}/counselor-code`, {
-    method: 'POST',
-    body: JSON.stringify({ action, code }),
-  });
-  return res.section;
+  return runWithCloudFallback(
+    () => cloudSetCounselorCode(sectionId, action, code),
+    async () => {
+      const res = await apiRequest<{ section: SchoolSection }>(`/sections/${sectionId}/counselor-code`, {
+        method: 'POST',
+        body: JSON.stringify({ action, code }),
+      });
+      return res.section;
+    }
+  );
 }
 
 export async function updateFirebaseLinkApi(meta: Partial<SchoolFirebaseSyncMeta>): Promise<SchoolFirebaseSyncMeta> {
-  const res = await apiRequest<{ firebaseSync: SchoolFirebaseSyncMeta }>('/firebase-link', {
-    method: 'PUT',
-    body: JSON.stringify(meta),
-  });
-  return res.firebaseSync;
+  return runWithCloudFallback(
+    () => cloudUpdateFirebaseLink(meta),
+    async () => {
+      const res = await apiRequest<{ firebaseSync: SchoolFirebaseSyncMeta }>('/firebase-link', {
+        method: 'PUT',
+        body: JSON.stringify(meta),
+      });
+      return res.firebaseSync;
+    }
+  );
 }
 
 export async function fetchAuditLogsApi(): Promise<AuditLogEntry[]> {
-  const res = await apiRequest<{ auditLogs: AuditLogEntry[] }>('/audit-logs', { method: 'GET' });
-  return res.auditLogs;
+  return runWithCloudFallback(
+    () => cloudFetchAuditLogs(),
+    async () => {
+      const res = await apiRequest<{ auditLogs: AuditLogEntry[] }>('/audit-logs', { method: 'GET' });
+      return res.auditLogs;
+    }
+  );
 }
 
 export async function createLocalBackupSnapshotApi(): Promise<{
   backup: SchoolBackupSummary;
   backups: SchoolBackupSummary[];
 }> {
-  return apiRequest('/backups/snapshot', { method: 'POST' });
+  if (isCloudSessionActive()) {
+    throw new Error(
+      'اللقطات الاحتياطية على القرص المحلي للخادم غير متاحة على الاستضافة الثابتة — استخدم «تصدير JSON آمن» أو المزامنة السحابية مع Firebase.'
+    );
+  }
+  try {
+    return await apiRequest('/backups/snapshot', { method: 'POST' });
+  } catch (err) {
+    if (err instanceof BackendUnavailableError) {
+      throw new Error(
+        'اللقطات الاحتياطية على القرص المحلي للخادم غير متاحة على هذه الاستضافة — استخدم «تصدير JSON آمن».'
+      );
+    }
+    throw err;
+  }
 }
 
 export async function exportSanitizedBackupApi(): Promise<Record<string, unknown>> {
-  return apiRequest('/backups/export', { method: 'GET' });
+  return runWithCloudFallback(
+    () => cloudExportSanitizedBackup(),
+    () => apiRequest('/backups/export', { method: 'GET' })
+  );
 }
 
 export async function restoreBackupApi(input: {
   fileName?: string;
   backupData?: Record<string, unknown>;
 }): Promise<{ workspace: SchoolWorkspacePayload }> {
-  return apiRequest('/backups/restore', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
+  return runWithCloudFallback(
+    () => cloudRestoreBackup(input),
+    () =>
+      apiRequest('/backups/restore', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+  );
 }
 
 // === Section / Counselor / Student / Absence / Subject APIs ===
@@ -349,30 +571,42 @@ export async function upsertStudentApi(
   sectionId: string,
   input: { id?: string; fullName: string; status?: SchoolStudentStatus; notes?: string }
 ): Promise<SchoolStudent> {
-  const path = input.id
-    ? `/sections/${sectionId}/students/${input.id}`
-    : `/sections/${sectionId}/students`;
-  const res = await apiRequest<{ student: SchoolStudent }>(path, {
-    method: input.id ? 'PUT' : 'POST',
-    body: JSON.stringify(input),
-  });
-  return res.student;
+  return runWithCloudFallback(
+    () => cloudUpsertStudent(sectionId, input),
+    async () => {
+      const path = input.id
+        ? `/sections/${sectionId}/students/${input.id}`
+        : `/sections/${sectionId}/students`;
+      const res = await apiRequest<{ student: SchoolStudent }>(path, {
+        method: input.id ? 'PUT' : 'POST',
+        body: JSON.stringify(input),
+      });
+      return res.student;
+    }
+  );
 }
 
 export async function deleteStudentApi(sectionId: string, studentId: string): Promise<void> {
-  await apiRequest(`/sections/${sectionId}/students/${studentId}`, { method: 'DELETE' });
+  await runWithCloudFallback(
+    () => cloudDeleteStudent(sectionId, studentId),
+    () => apiRequest(`/sections/${sectionId}/students/${studentId}`, { method: 'DELETE' })
+  );
 }
 
 export async function bulkIssueStudentCodesApi(
   sectionId: string,
   mode: 'missing_only' | 'regenerate_all' = 'missing_only'
 ): Promise<{ issuedCount: number; skippedCount: number; students: SchoolStudent[] }> {
-  return apiRequest<{ issuedCount: number; skippedCount: number; students: SchoolStudent[] }>(
-    `/sections/${sectionId}/students/bulk-codes`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ mode }),
-    }
+  return runWithCloudFallback(
+    () => cloudBulkIssueStudentCodes(sectionId, mode),
+    () =>
+      apiRequest<{ issuedCount: number; skippedCount: number; students: SchoolStudent[] }>(
+        `/sections/${sectionId}/students/bulk-codes`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ mode }),
+        }
+      )
   );
 }
 
@@ -382,14 +616,19 @@ export async function setStudentCodeApi(
   action: 'issue' | 'change' | 'revoke',
   code?: string
 ): Promise<SchoolStudent> {
-  const res = await apiRequest<{ student: SchoolStudent }>(
-    `/sections/${sectionId}/students/${studentId}/code`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ action, code }),
+  return runWithCloudFallback(
+    () => cloudSetStudentCode(sectionId, studentId, action, code),
+    async () => {
+      const res = await apiRequest<{ student: SchoolStudent }>(
+        `/sections/${sectionId}/students/${studentId}/code`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ action, code }),
+        }
+      );
+      return res.student;
     }
   );
-  return res.student;
 }
 
 export async function upsertAbsenceApi(
@@ -403,18 +642,26 @@ export async function upsertAbsenceApi(
     notes?: string;
   }
 ): Promise<StudentAbsence> {
-  const path = input.id
-    ? `/sections/${sectionId}/absences/${input.id}`
-    : `/sections/${sectionId}/absences`;
-  const res = await apiRequest<{ absence: StudentAbsence }>(path, {
-    method: input.id ? 'PUT' : 'POST',
-    body: JSON.stringify(input),
-  });
-  return res.absence;
+  return runWithCloudFallback(
+    () => cloudUpsertAbsence(sectionId, input),
+    async () => {
+      const path = input.id
+        ? `/sections/${sectionId}/absences/${input.id}`
+        : `/sections/${sectionId}/absences`;
+      const res = await apiRequest<{ absence: StudentAbsence }>(path, {
+        method: input.id ? 'PUT' : 'POST',
+        body: JSON.stringify(input),
+      });
+      return res.absence;
+    }
+  );
 }
 
 export async function deleteAbsenceApi(sectionId: string, absenceId: string): Promise<void> {
-  await apiRequest(`/sections/${sectionId}/absences/${absenceId}`, { method: 'DELETE' });
+  await runWithCloudFallback(
+    () => cloudDeleteAbsence(sectionId, absenceId),
+    () => apiRequest(`/sections/${sectionId}/absences/${absenceId}`, { method: 'DELETE' })
+  );
 }
 
 export async function upsertSubjectApi(
@@ -427,32 +674,64 @@ export async function upsertSubjectApi(
     annualPursuitConfig?: AnnualPursuitConfig;
   }
 ): Promise<SubjectGradebook> {
-  const path = input.id
-    ? `/sections/${sectionId}/subjects/${input.id}`
-    : `/sections/${sectionId}/subjects`;
-  const res = await apiRequest<{ subject: SubjectGradebook }>(path, {
-    method: input.id ? 'PUT' : 'POST',
-    body: JSON.stringify(input),
-  });
-  return res.subject;
+  return runWithCloudFallback(
+    () => cloudUpsertSubject(sectionId, input),
+    async () => {
+      const path = input.id
+        ? `/sections/${sectionId}/subjects/${input.id}`
+        : `/sections/${sectionId}/subjects`;
+      const res = await apiRequest<{ subject: SubjectGradebook }>(path, {
+        method: input.id ? 'PUT' : 'POST',
+        body: JSON.stringify(input),
+      });
+      return res.subject;
+    }
+  );
 }
 
 export async function deleteSubjectApi(sectionId: string, subjectId: string): Promise<void> {
-  await apiRequest(`/sections/${sectionId}/subjects/${subjectId}`, { method: 'DELETE' });
+  await runWithCloudFallback(
+    () => cloudDeleteSubject(sectionId, subjectId),
+    () => apiRequest(`/sections/${sectionId}/subjects/${subjectId}`, { method: 'DELETE' })
+  );
 }
 
-export function saveSectionAction(sectionId: string, action: 'group'|'message', data: { name?: string; studentIds?: string[]; studentId?: string; body?: string }) {
-  return apiRequest(`/sections/${sectionId}/staff-actions/${action}`, {method:'POST',body:JSON.stringify(data)});
+export function saveSectionAction(
+  sectionId: string,
+  action: 'group' | 'message',
+  data: { name?: string; studentIds?: string[]; studentId?: string; body?: string }
+) {
+  return runWithCloudFallback(
+    () => cloudSaveSectionAction(sectionId, action, data),
+    () => apiRequest(`/sections/${sectionId}/staff-actions/${action}`, { method: 'POST', body: JSON.stringify(data) })
+  );
 }
 
-export function addSectionObservation(sectionId: string, input: {studentId?: string; category: string; note: string}) {
-  return apiRequest(`/sections/${sectionId}/observations`, {method:'POST', body:JSON.stringify(input)});
+export function addSectionObservation(
+  sectionId: string,
+  input: { studentId?: string; category: string; note: string }
+) {
+  return runWithCloudFallback(
+    () => cloudAddSectionObservation(sectionId, input),
+    () => apiRequest(`/sections/${sectionId}/observations`, { method: 'POST', body: JSON.stringify(input) })
+  );
 }
 
-export function releaseGrades(sectionId: string, subjectId: string, period: 'term1' | 'midyear' | 'term2', approve: boolean, columnIds?: string[]) {
-  return apiRequest(`/sections/${sectionId}/subjects/${subjectId}/release`, {
-    method: 'POST', body: JSON.stringify({ period, approve, columnIds }),
-  });
+export function releaseGrades(
+  sectionId: string,
+  subjectId: string,
+  period: 'term1' | 'midyear' | 'term2',
+  approve: boolean,
+  columnIds?: string[]
+) {
+  return runWithCloudFallback(
+    () => cloudReleaseGrades(sectionId, subjectId, period, approve, columnIds),
+    () =>
+      apiRequest(`/sections/${sectionId}/subjects/${subjectId}/release`, {
+        method: 'POST',
+        body: JSON.stringify({ period, approve, columnIds }),
+      })
+  );
 }
 
 export async function updateGradeCellsApi(
@@ -469,11 +748,16 @@ export async function updateGradeCellsApi(
         throw new Error('توجد تعديلات محلية تحتاج مراجعة قبل حفظ درجات جديدة.');
       }
     }
-    const res = await apiRequest<{ subject: SubjectGradebook }>(
-      `/sections/${sectionId}/subjects/${subjectId}/cells`,
-      { method: 'POST', body: JSON.stringify({ updates }) }
+    return await runWithCloudFallback(
+      () => cloudUpdateGradeCells(sectionId, subjectId, updates),
+      async () => {
+        const res = await apiRequest<{ subject: SubjectGradebook }>(
+          `/sections/${sectionId}/subjects/${subjectId}/cells`,
+          { method: 'POST', body: JSON.stringify({ updates }) }
+        );
+        return res.subject;
+      }
     );
-    return res.subject;
   } catch (err) {
     if (canQueueOffline(err)) return saveGradeEditOffline(sectionId, subjectId, updates);
     throw err;
@@ -485,10 +769,19 @@ export async function extractSheetWithAiApi(input: {
   description?: string;
   boxes?: ImportBoundingBox[];
 }): Promise<ImportExtractionResult> {
-  return apiRequest<ImportExtractionResult>('/import-extract', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
+  try {
+    return await apiRequest<ImportExtractionResult>('/import-extract', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  } catch (err) {
+    if (err instanceof BackendUnavailableError) {
+      throw new Error(
+        'خدمة قراءة كشوف الدرجات بالذكاء الاصطناعي تتطلب تشغيل خادم التطبيق الكامل (Backend Server) وغير متاحة على الاستضافة الثابتة.'
+      );
+    }
+    throw err;
+  }
 }
 
 export async function commitSmartImportApi(
@@ -511,10 +804,14 @@ export async function commitSmartImportApi(
     }[];
   }
 ): Promise<{ subject: SubjectGradebook; appliedCount: number; skippedCount: number }> {
-  return apiRequest(`/sections/${sectionId}/import-commit`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  return runWithCloudFallback(
+    () => cloudCommitSmartImport(sectionId, payload),
+    () =>
+      apiRequest(`/sections/${sectionId}/import-commit`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+  );
 }
 
 export async function saveImportTemplateApi(input: {
@@ -522,13 +819,22 @@ export async function saveImportTemplateApi(input: {
   description?: string;
   boxes: ImportBoundingBox[];
 }): Promise<ImportTemplate> {
-  const res = await apiRequest<{ template: ImportTemplate }>('/templates', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
-  return res.template;
+  return runWithCloudFallback(
+    () => cloudSaveImportTemplate(input),
+    async () => {
+      const res = await apiRequest<{ template: ImportTemplate }>('/templates', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      });
+      return res.template;
+    }
+  );
 }
 
 export async function deleteImportTemplateApi(id: string): Promise<void> {
-  await apiRequest(`/templates/${id}`, { method: 'DELETE' });
+  await runWithCloudFallback(
+    () => cloudDeleteImportTemplate(id),
+    () => apiRequest(`/templates/${id}`, { method: 'DELETE' })
+  );
 }
+

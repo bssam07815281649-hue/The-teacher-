@@ -15,6 +15,18 @@ import {
   parseRawCellValue,
 } from '../src/utils/arabicNameMatch';
 import { computeStudentSubjectSummary } from '../src/utils/gradeCalculations';
+import {
+  computeCodeLookupId,
+  generateHex64,
+  hashAdminCodePbkdf2,
+  isValidHex64,
+  normalizeAccessCode as normalizeCloudCode,
+  verifyAdminCodePbkdf2,
+} from '../src/utils/schoolCodeHash';
+import {
+  buildCapStudentDocPayload,
+  isBackendUnavailableResponse,
+} from '../src/services/schoolCloudShared';
 import type { SubjectGradebook } from '../src/types';
 
 async function startTestServer(
@@ -1121,5 +1133,167 @@ test('Active Admin and Counselor sessions survive server restarts via persisted 
     else delete process.env.SCHOOL_SESSION_SECRET;
   }
 });
+
+test('Cloud access code hashing, PBKDF2 admin verification, static 405/HTML fallback detection, and student capability isolation', async () => {
+  // 1. Arabic numeral normalization & bidirectional stripping match lookup IDs consistently
+  assert.equal(normalizeCloudCode('\u200f١٢٣٤-ABC '), '1234-ABC');
+  const hashA = await computeCodeLookupId('default_school', 'STD-١٢٣٤');
+  const hashB = await computeCodeLookupId('default_school', '\u200fSTD-1234 ');
+  assert.equal(hashA, hashB);
+  assert.equal(isValidHex64(hashA), true);
+
+  const otherSchoolHash = await computeCodeLookupId('other_school', 'STD-1234');
+  assert.notEqual(otherSchoolHash, hashA);
+
+  // 2. Random 256-bit capability key generation
+  const capKey = generateHex64();
+  assert.equal(isValidHex64(capKey), true);
+
+  // 3. PBKDF2-SHA256 admin code hash and constant-time verification
+  const adminHashed = await hashAdminCodePbkdf2('ADM-٩٨٧٦');
+  assert.equal(
+    await verifyAdminCodePbkdf2('ADM-9876', adminHashed.hash, adminHashed.salt, adminHashed.iterations),
+    true
+  );
+  assert.equal(
+    await verifyAdminCodePbkdf2('WRONG-CODE', adminHashed.hash, adminHashed.salt, adminHashed.iterations),
+    false
+  );
+
+  // 4. Static nginx hosting detection (HTTP 405 & HTML 200 SPA fallback vs genuine API errors)
+  assert.equal(isBackendUnavailableResponse(405, '<html>405 Not Allowed</html>', 'text/html'), true);
+  assert.equal(isBackendUnavailableResponse(502, '', 'text/plain'), true);
+  assert.equal(isBackendUnavailableResponse(503, '', 'text/plain'), true);
+  assert.equal(isBackendUnavailableResponse(404, '<html>Not Found</html>', 'text/html'), true);
+  assert.equal(isBackendUnavailableResponse(200, '<!doctype html><html></html>', 'text/html'), true);
+  assert.equal(isBackendUnavailableResponse(200, '{"school":{"name":"Test"}}', 'application/json'), false);
+  assert.equal(isBackendUnavailableResponse(401, '{"error":"كود غير صحيح"}', 'application/json'), false);
+  assert.equal(isBackendUnavailableResponse(403, '{"error":"غير مخول"}', 'application/json'), false);
+
+  // 5. Student capability payload must strictly strip other students' cells, internal notices, and counselor codes
+  const studentPayload = buildCapStudentDocPayload({
+    capKey,
+    schoolId: 'default_school',
+    ownerUid: 'owner_uid',
+    school: {
+      id: 'default_school',
+      name: 'المدرسة النموذجية',
+      academicYear: '2025-2026',
+      directorate: 'الرصافة',
+      logoDataUrl: '',
+      coverDataUrl: '',
+      overview: '',
+      vision: '',
+      mission: '',
+      goals: [],
+      updatedAt: '2026-01-01T00:00:00Z',
+    },
+    stages: [{ id: 'stg_1', name: 'الرابع العلمي', orderIndex: 0 }],
+    section: {
+      id: 'sec_1',
+      stageId: 'stg_1',
+      name: 'أ',
+      counselorName: 'علي',
+      counselorCodeStatus: 'active',
+      counselorAccessCode: 'CSL-SECRET',
+      orderIndex: 0,
+      messages: [
+        { id: 'm_own', studentId: 'stu_1', body: 'رسالة خاصة بك', createdAt: '2026-01-01T00:00:00Z' },
+        { id: 'm_other', studentId: 'stu_2', body: 'رسالة طالب آخر', createdAt: '2026-01-01T00:00:00Z' },
+      ],
+      observations: [{ id: 'obs_1', category: 'داخلي', note: 'ملاحظة مرشد', createdAt: '2026-01-01T00:00:00Z' }],
+      caseGroups: [{ name: 'متابعة', studentIds: ['stu_1', 'stu_2'] }],
+    },
+    student: {
+      id: 'stu_1',
+      sectionId: 'sec_1',
+      fullName: 'محمد حسن',
+      status: 'active',
+      studentCodeStatus: 'active',
+      studentAccessCode: 'STD-OWN-1',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+      _capKey: capKey,
+      _codeHash: hashA,
+    } as Parameters<typeof buildCapStudentDocPayload>[0]['student'],
+    absences: [
+      {
+        id: 'ab_1',
+        sectionId: 'sec_1',
+        studentId: 'stu_1',
+        date: '2026-01-02',
+        excuseType: 'unexcused',
+        subjectName: '',
+        notes: '',
+        recordedBy: 'المرشد',
+        createdAt: '',
+        updatedAt: '',
+      },
+      {
+        id: 'ab_2',
+        sectionId: 'sec_1',
+        studentId: 'stu_2',
+        date: '2026-01-02',
+        excuseType: 'unexcused',
+        subjectName: '',
+        notes: '',
+        recordedBy: 'المرشد',
+        createdAt: '',
+        updatedAt: '',
+      },
+    ],
+    subjects: [
+      {
+        id: 'sub_1',
+        sectionId: 'sec_1',
+        name: 'الأحياء',
+        midyearColumns: [],
+        subRecords: [],
+        cells: {
+          'stu_1::c1': { status: 'score', score: 95 },
+          'stu_2::c1': { status: 'score', score: 42 },
+        },
+        annualPursuitConfig: { term1ColumnIds: [], midyearColumnIds: [], term2ColumnIds: [], scaleMode: 'scale100' },
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ],
+    announcements: [
+      {
+        id: 'ann_pub',
+        title: 'إعلان عام',
+        body: 'متاح للجميع',
+        pinned: false,
+        visibility: 'public',
+        createdAt: '',
+        updatedAt: '',
+        authorName: 'الإدارة',
+      },
+      {
+        id: 'ann_int',
+        title: 'تبليغ داخلي',
+        body: 'للمرشدين فقط',
+        pinned: false,
+        visibility: 'internal',
+        createdAt: '',
+        updatedAt: '',
+        authorName: 'الإدارة',
+      },
+    ],
+  }) as Record<string, any>;
+
+  assert.equal(studentPayload.section.counselorAccessCode, undefined);
+  assert.equal(studentPayload.section.observations, undefined);
+  assert.equal(studentPayload.section.caseGroups, undefined);
+  assert.equal(studentPayload.section.messages.length, 1);
+  assert.equal(studentPayload.section.messages[0].id, 'm_own');
+  assert.equal(studentPayload.student.studentAccessCode, undefined);
+  assert.equal(studentPayload.student._capKey, undefined);
+  assert.equal(studentPayload.absences.length, 1);
+  assert.equal(studentPayload.absences[0].id, 'ab_1');
+  assert.deepEqual(Object.keys(studentPayload.subjects[0].cells), ['stu_1::c1']);
+  assert.equal(studentPayload.announcements.length, 1);
+  assert.equal(studentPayload.announcements[0].id, 'ann_pub');
+});
+
 
 

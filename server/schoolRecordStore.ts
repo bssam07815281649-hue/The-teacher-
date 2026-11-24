@@ -27,8 +27,8 @@ import type {
   SchoolWorkspacePayload,
   StudentAbsence,
   SubjectGradebook,
-} from '../src/types';
-import { computeStudentSubjectSummary, getTermColumns, makeCellKey } from '../src/utils/gradeCalculations';
+} from '../src/types.ts';
+import { computeStudentSubjectSummary, getTermColumns, makeCellKey } from '../src/utils/gradeCalculations.ts';
 
 const scryptAsync = promisify(crypto.scrypt);
 

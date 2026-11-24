@@ -3,7 +3,7 @@ import type {
   GradeCellValue,
   GradeColumn,
   SubjectGradebook,
-} from '../types';
+} from '../types.ts';
 
 export interface StudentSubjectSummary {
   term1Avg: number | null;

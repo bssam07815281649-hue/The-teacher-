@@ -7,9 +7,9 @@ import type {
   ImportExtractionResult,
   SchoolSessionUser,
   SchoolUserRole,
-} from '../src/types';
-import { parseRawCellValue } from '../src/utils/arabicNameMatch';
-import { SchoolRecordError, type SchoolRecordStore } from './schoolRecordStore';
+} from '../src/types.ts';
+import { parseRawCellValue } from '../src/utils/arabicNameMatch.ts';
+import { SchoolRecordError, type SchoolRecordStore } from './schoolRecordStore.ts';
 
 interface SchoolAuthedRequest extends Request {
   schoolSession?: SchoolSessionUser;

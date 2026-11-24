@@ -13,9 +13,9 @@ import {
   type FunctionDeclaration,
   type LiveServerMessage,
 } from '@google/genai';
-import { SchoolRecordStore } from './server/schoolRecordStore';
-import { createSchoolRecordRouter } from './server/schoolRecordRoutes';
-import { DailyAiQuotaTracker } from './server/aiQuota';
+import { SchoolRecordStore } from './server/schoolRecordStore.ts';
+import { createSchoolRecordRouter } from './server/schoolRecordRoutes.ts';
+import { DailyAiQuotaTracker } from './server/aiQuota.ts';
 
 const PORT = Number(process.env.PORT) || 3000;
 const ALLOWED_TEXT_MODELS = new Set([

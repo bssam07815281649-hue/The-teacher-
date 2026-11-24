@@ -44,6 +44,7 @@ import {
   deleteSectionApi,
   deleteStageApi,
   exportSanitizedBackupApi,
+  isCloudSessionActive,
   reorderStagesApi,
   restoreBackupApi,
   rotateAdminCodeApi,
@@ -53,6 +54,7 @@ import {
   upsertSectionApi,
   upsertStageApi,
 } from '../../services/schoolRecordClient';
+import { getInMemoryAdminCode } from '../../services/schoolCloudAdapter';
 import { auth } from '../../services/firebase';
 import {
   syncWorkspaceToFirestore,
@@ -61,6 +63,7 @@ import {
 
 interface AdminDashboardProps {
   workspace: SchoolWorkspacePayload;
+  adminCode?: string;
   onWorkspaceRefresh: () => Promise<void>;
   onEnterSection: (sectionId: string) => void;
   onOpenFirebaseModal: () => void;
@@ -136,6 +139,7 @@ function codeStatusBadge(status: SchoolCodeStatus) {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   workspace,
+  adminCode,
   onWorkspaceRefresh,
   onEnterSection,
   onOpenFirebaseModal,
@@ -174,8 +178,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         },
         announcements: workspace.announcements.map((a) => `${a.id}:${a.updatedAt}`),
         stages: workspace.stages.map((s) => `${s.id}:${s.orderIndex}:${s.name}`),
-        sections: workspace.sections.map((s) => `${s.id}:${s.name}:${s.counselorName}:${s.counselorCodeStatus}`),
-        students: workspace.students.map((st) => `${st.id}:${st.updatedAt}:${st.studentCodeStatus}`),
+        sections: workspace.sections.map(
+          (s) => `${s.id}:${s.name}:${s.counselorName}:${s.counselorCodeStatus}:${s.counselorAccessCode || ''}`
+        ),
+        students: workspace.students.map(
+          (st) => `${st.id}:${st.updatedAt}:${st.studentCodeStatus}:${st.studentAccessCode || ''}`
+        ),
         absences: workspace.absences.map((ab) => ab.id),
         subjects: workspace.subjects.map((sb) => `${sb.id}:${sb.updatedAt}`),
         templates: workspace.templates.map((t) => t.id),
@@ -193,6 +201,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   );
 
   useEffect(() => {
+    if (isCloudSessionActive()) return;
     const user = auth.currentUser;
     if (!user || user.isAnonymous || !user.emailVerified) return;
     if (!workspace.firebaseSync?.linked) return;
@@ -201,11 +210,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (expectedEmail && userEmail !== expectedEmail) return;
     if (syncFingerprint === lastSyncFingerprintRef.current) return;
 
+    const effectiveAdminCode = adminCode || getInMemoryAdminCode();
+
     const timer = window.setTimeout(() => {
       if (syncInFlightRef.current) return;
       syncInFlightRef.current = true;
       lastSyncFingerprintRef.current = syncFingerprint;
-      void syncWorkspaceToFirestore(workspace)
+      void syncWorkspaceToFirestore(
+        workspace,
+        effectiveAdminCode ? { adminCode: effectiveAdminCode } : undefined
+      )
         .then(async (meta) => {
           setFbReachable(true);
           setAutoSyncLabel(`محفوظ على ${user.email}`);
@@ -220,7 +234,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }, 1100);
 
     return () => window.clearTimeout(timer);
-  }, [syncFingerprint, workspace]);
+  }, [adminCode, syncFingerprint, workspace]);
 
   // === Tab 1: School Profile & Announcements ===
   const [schoolName, setSchoolName] = useState(workspace.school.name);
@@ -1311,26 +1325,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </h3>
 
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={async () => {
-                    setBusy(true);
-                    try {
-                      await createLocalBackupSnapshotApi();
-                      await onWorkspaceRefresh();
-                      notify('تم إنشاء لقطة احتياطية محلية آمنة على الخادم.');
-                    } catch (err) {
-                      setError(err instanceof Error ? err.message : 'تعذر إنشاء النسخة.');
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                  className="flex-1 min-h-[42px] px-3.5 rounded-xl bg-[#653CF5] hover:bg-[#4320D9] text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <FolderSync className="w-4 h-4" />
-                  <span>لقطة احتياطية الآن</span>
-                </button>
+                {!isCloudSessionActive() && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      try {
+                        await createLocalBackupSnapshotApi();
+                        await onWorkspaceRefresh();
+                        notify('تم إنشاء لقطة احتياطية محلية آمنة على الخادم.');
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : 'تعذر إنشاء النسخة.');
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                    className="flex-1 min-h-[42px] px-3.5 rounded-xl bg-[#653CF5] hover:bg-[#4320D9] text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <FolderSync className="w-4 h-4" />
+                    <span>لقطة احتياطية الآن</span>
+                  </button>
+                )}
 
                 <button
                   type="button"
@@ -1440,7 +1456,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onClick={async () => {
                       setError('');
                       try {
-                        await rotateAdminCodeApi(newAdminCode.trim());
+                        const cleanNext = newAdminCode.trim();
+                        const wasCloud = isCloudSessionActive();
+                        await rotateAdminCodeApi(cleanNext);
+                        if (!wasCloud && auth.currentUser && !auth.currentUser.isAnonymous && auth.currentUser.emailVerified) {
+                          await syncWorkspaceToFirestore(workspace, {
+                            adminCode: cleanNext,
+                            previousAdminCode: adminCode || getInMemoryAdminCode(),
+                          }).catch(() => {});
+                        }
                         await onLogout();
                       } catch (err) {
                         setError(err instanceof Error ? err.message : 'تعذر تغيير كود المدير.');

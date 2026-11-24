@@ -22,12 +22,19 @@ import {
   clearSchoolSessionToken,
   fetchSchoolPublic,
   fetchSchoolWorkspace,
+  isCloudSessionActive,
   loginSchoolWithGoogleAdmin,
   logoutSchoolSession,
   restoreBackupApi,
   setSchoolUnauthorizedHandler,
+  setStudentCodeApi,
+  updateFirebaseLinkApi,
 } from '../services/schoolRecordClient';
-import { restoreWorkspaceFromFirestore } from '../services/schoolFirebaseSync';
+import {
+  pullCloudSectionUpdatesForWorkspace,
+  restoreWorkspaceFromFirestore,
+  syncWorkspaceToFirestore,
+} from '../services/schoolFirebaseSync';
 import type { SchoolWorkspacePayload } from '../types';
 import { AdminDashboard } from './school-record/AdminDashboard';
 import { CounselorWorkspace } from './school-record/CounselorWorkspace';
@@ -108,6 +115,7 @@ export function AdminGate({
     isGoogleUser(auth.currentUser) ? auth.currentUser : null
   );
   const [adminCode, setAdminCode] = useState(initialAdminCode);
+  const [verifiedAdminCode, setVerifiedAdminCode] = useState('');
   const [showCode, setShowCode] = useState(false);
   const [adminCodeConfigured, setAdminCodeConfigured] = useState<boolean | null>(null);
   const [workspace, setWorkspace] = useState<SchoolWorkspacePayload | null>(null);
@@ -170,6 +178,7 @@ export function AdminGate({
   useEffect(() => {
     setSchoolUnauthorizedHandler(() => {
       if (!mountedRef.current || inFlightVerifyRef.current) return;
+      setVerifiedAdminCode('');
       setWorkspace(null);
       setActiveSectionId(null);
       setAccess('form');
@@ -227,29 +236,86 @@ export function AdminGate({
 
         let ws = await fetchSchoolWorkspace();
         if (mountedRef.current) {
+          setVerifiedAdminCode(cleanCode);
           setWorkspace(ws);
         }
 
-        // If this Gmail's local server tenant is still fresh/empty, check its Firestore cloud space and restore automatically
-        const isEmptyLocalSchool =
-          ws.stages.length === 0 &&
-          ws.sections.length === 0 &&
-          ws.students.length === 0 &&
-          ws.subjects.length === 0;
+        // When backed by local Express server, reconcile cloud state with Firestore:
+        // 1) Restore full school from Firestore if local store is completely empty.
+        // 2) Pull newer counselor edits made via Firestore while admin was away.
+        // 3) Publish full school + security capability documents so any device works permanently.
+        if (!isCloudSessionActive() && auth.currentUser?.uid === user.uid) {
+          const isEmptyLocalSchool =
+            ws.stages.length === 0 &&
+            ws.sections.length === 0 &&
+            ws.students.length === 0 &&
+            ws.subjects.length === 0;
 
-        if (isEmptyLocalSchool && auth.currentUser?.uid === user.uid) {
+          if (isEmptyLocalSchool) {
+            try {
+              if (mountedRef.current) {
+                setStatusMessage(`جاري فحص واستعادة بيانات المدرسة المحفوظة على ${user.email}…`);
+              }
+              const cloudBackup = await restoreWorkspaceFromFirestore(ws.school.id);
+              if (cloudBackup) {
+                const restored = await restoreBackupApi({ backupData: cloudBackup });
+                ws = restored.workspace;
+                if (mountedRef.current) setWorkspace(ws);
+              }
+            } catch (cloudErr) {
+              console.warn('Cloud school restore check skipped:', cloudErr);
+            }
+          } else {
+            try {
+              const pulled = await pullCloudSectionUpdatesForWorkspace(ws);
+              if (pulled.changed) {
+                const prevStudentsById = new Map(ws.students.map((st) => [st.id, st]));
+                const restored = await restoreBackupApi({
+                  backupData: {
+                    schemaVersion: 2,
+                    exportedAt: new Date().toISOString(),
+                    school: pulled.workspace.school,
+                    announcements: pulled.workspace.announcements,
+                    stages: pulled.workspace.stages,
+                    sections: pulled.workspace.sections,
+                    students: pulled.workspace.students,
+                    absences: pulled.workspace.absences,
+                    subjects: pulled.workspace.subjects,
+                    templates: pulled.workspace.templates,
+                  },
+                });
+                ws = restored.workspace;
+                for (const cloudSt of pulled.workspace.students) {
+                  const prevSt = prevStudentsById.get(cloudSt.id);
+                  if (
+                    cloudSt.studentCodeStatus === 'active' &&
+                    cloudSt.studentAccessCode &&
+                    prevSt?.studentAccessCode !== cloudSt.studentAccessCode
+                  ) {
+                    const action = prevSt?.studentCodeStatus === 'active' ? 'change' : 'issue';
+                    await setStudentCodeApi(cloudSt.sectionId, cloudSt.id, action, cloudSt.studentAccessCode).catch(() => {});
+                  } else if (
+                    cloudSt.studentCodeStatus === 'revoked' &&
+                    prevSt?.studentCodeStatus === 'active'
+                  ) {
+                    await setStudentCodeApi(cloudSt.sectionId, cloudSt.id, 'revoke').catch(() => {});
+                  }
+                }
+                ws = await fetchSchoolWorkspace();
+                if (mountedRef.current) setWorkspace(ws);
+              }
+            } catch (pullErr) {
+              console.warn('Cloud section pull skipped:', pullErr);
+            }
+          }
+
           try {
-            if (mountedRef.current) {
-              setStatusMessage(`جاري فحص واستعادة بيانات المدرسة المحفوظة على ${user.email}…`);
-            }
-            const cloudBackup = await restoreWorkspaceFromFirestore(ws.school.id);
-            if (cloudBackup) {
-              const restored = await restoreBackupApi({ backupData: cloudBackup });
-              ws = restored.workspace;
-              if (mountedRef.current) setWorkspace(ws);
-            }
-          } catch (cloudErr) {
-            console.warn('Cloud school restore check skipped:', cloudErr);
+            const meta = await syncWorkspaceToFirestore(ws, { adminCode: cleanCode });
+            const savedMeta = await updateFirebaseLinkApi(meta).catch(() => meta);
+            ws = { ...ws, firebaseSync: savedMeta };
+            if (mountedRef.current) setWorkspace(ws);
+          } catch (syncErr) {
+            console.warn('Initial cloud capability sync skipped:', syncErr);
           }
         }
 
@@ -259,6 +325,7 @@ export function AdminGate({
         }
       } catch (err) {
         clearSchoolSessionToken();
+        setVerifiedAdminCode('');
         if (mountedRef.current) {
           setWorkspace(null);
           setAccess('form');
@@ -421,6 +488,7 @@ export function AdminGate({
 
   async function handleAdminLogout() {
     await logoutSchoolSession({ isAdmin: true });
+    setVerifiedAdminCode('');
     setWorkspace(null);
     setActiveSectionId(null);
     setAccess('form');
@@ -463,6 +531,7 @@ export function AdminGate({
           ) : (
             <AdminDashboard
               workspace={workspace}
+              adminCode={verifiedAdminCode}
               onWorkspaceRefresh={loadWorkspace}
               onEnterSection={(sectionId) => setActiveSectionId(sectionId)}
               onOpenFirebaseModal={() => setFirebaseModalOpen(true)}
@@ -473,6 +542,7 @@ export function AdminGate({
           {firebaseModalOpen && (
             <AdminFirebaseModal
               workspace={workspace}
+              adminCode={verifiedAdminCode}
               onClose={() => setFirebaseModalOpen(false)}
               onSyncMetaUpdated={(meta) => {
                 setWorkspace((prev) => (prev ? { ...prev, firebaseSync: meta } : prev));

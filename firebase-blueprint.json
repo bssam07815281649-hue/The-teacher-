@@ -403,6 +403,127 @@
         "timestamp": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "schoolId", "ownerUid", "actorName", "actorRole", "action", "targetType", "targetId", "targetLabel", "prevValue", "nextValue", "timestamp"]
+    },
+    "SchoolPublicInfo": {
+      "title": "SchoolPublicInfo",
+      "description": "Public non-PII school profile, public announcements, and gate metadata for homepage visitors.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 32, "pattern": "^info$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 200 },
+        "academicYear": { "type": "string", "maxLength": 40 },
+        "directorate": { "type": "string", "maxLength": 160 },
+        "logoDataUrl": { "type": "string", "maxLength": 350000 },
+        "coverDataUrl": { "type": "string", "maxLength": 450000 },
+        "overview": { "type": "string", "maxLength": 4000 },
+        "vision": { "type": "string", "maxLength": 2000 },
+        "mission": { "type": "string", "maxLength": 2000 },
+        "goals": { "type": "array" },
+        "announcements": { "type": "array" },
+        "stagesCount": { "type": "integer" },
+        "sectionsCount": { "type": "integer" },
+        "adminCodeConfigured": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "name", "academicYear", "directorate", "stagesCount", "sectionsCount", "adminCodeConfigured", "updatedAt"]
+    },
+    "SchoolAdminSecurity": {
+      "title": "SchoolAdminSecurity",
+      "description": "Principal PBKDF2-SHA256 verifier stored exclusively for the Google-verified school owner.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 32, "pattern": "^config$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "hash": { "type": "string", "maxLength": 128, "pattern": "^[a-f0-9]{64,128}$" },
+        "salt": { "type": "string", "maxLength": 64, "pattern": "^[a-f0-9]{16,64}$" },
+        "iterations": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "ownerUid", "hash", "salt", "iterations", "updatedAt"]
+    },
+    "SchoolSectionLock": {
+      "title": "SchoolSectionLock",
+      "description": "Admin-only lock binding a section ID to its active counselor code hash and 256-bit capability key.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "sectionId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "counselorCodeHash": { "type": "string", "maxLength": 64 },
+        "sectionCapKey": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "ownerUid", "sectionId", "counselorCodeHash", "sectionCapKey", "updatedAt"]
+    },
+    "SchoolAccessLookup": {
+      "title": "SchoolAccessLookup",
+      "description": "Hashed access code lookup entry pointing to a role capability key or admin gate route.",
+      "type": "object",
+      "properties": {
+        "codeHash": { "type": "string", "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "role": { "type": "string", "enum": ["admin_gate", "counselor", "student"] },
+        "sectionId": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "capabilityKey": { "type": "string", "maxLength": 64 },
+        "displayName": { "type": "string", "maxLength": 160 },
+        "sectionName": { "type": "string", "maxLength": 160 },
+        "stageName": { "type": "string", "maxLength": 160 },
+        "status": { "type": "string", "enum": ["active", "revoked"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["codeHash", "schoolId", "ownerUid", "role", "sectionId", "studentId", "capabilityKey", "displayName", "sectionName", "stageName", "status", "updatedAt"]
+    },
+    "SchoolCapSection": {
+      "title": "SchoolCapSection",
+      "description": "Capability-keyed single-section workspace accessible only to the section counselor or school admin.",
+      "type": "object",
+      "properties": {
+        "capKey": { "type": "string", "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "sectionId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "stageId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "counselorCodeHash": { "type": "string", "maxLength": 64 },
+        "school": { "type": "object" },
+        "stages": { "type": "array" },
+        "announcements": { "type": "array" },
+        "section": { "type": "object" },
+        "students": { "type": "array" },
+        "absences": { "type": "array" },
+        "subjects": { "type": "array" },
+        "templates": { "type": "array" },
+        "pendingAuditLogs": { "type": "array" },
+        "announcementReads": { "type": "object" },
+        "counselorEditedAt": { "type": "string", "maxLength": 40 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["capKey", "schoolId", "ownerUid", "sectionId", "stageId", "counselorCodeHash", "school", "stages", "announcements", "section", "students", "absences", "subjects", "templates", "pendingAuditLogs", "announcementReads", "counselorEditedAt", "updatedAt"]
+    },
+    "SchoolCapStudent": {
+      "title": "SchoolCapStudent",
+      "description": "Capability-keyed read-only personal portal workspace scoped to one student.",
+      "type": "object",
+      "properties": {
+        "capKey": { "type": "string", "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "sectionId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "school": { "type": "object" },
+        "stages": { "type": "array" },
+        "section": { "type": "object" },
+        "student": { "type": "object" },
+        "absences": { "type": "array" },
+        "subjects": { "type": "array" },
+        "announcements": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["capKey", "schoolId", "ownerUid", "sectionId", "studentId", "school", "stages", "section", "student", "absences", "subjects", "announcements", "updatedAt"]
     }
   },
   "firestore": {
@@ -485,6 +606,30 @@
     "/schools/{schoolId}/auditLogs/{logId}": {
       "schema": { "$ref": "#/entities/SchoolAuditLog" },
       "description": "Immutable append-only audit log entries."
+    },
+    "/schools/{schoolId}/public/{docId}": {
+      "schema": { "$ref": "#/entities/SchoolPublicInfo" },
+      "description": "Public non-PII school profile and public announcements."
+    },
+    "/schools/{schoolId}/adminSecurity/{docId}": {
+      "schema": { "$ref": "#/entities/SchoolAdminSecurity" },
+      "description": "PBKDF2 verifier for principal access code (admin-only)."
+    },
+    "/schools/{schoolId}/sectionLocks/{sectionId}": {
+      "schema": { "$ref": "#/entities/SchoolSectionLock" },
+      "description": "Admin-only lock binding a section to its active counselor code hash and capability key."
+    },
+    "/schools/{schoolId}/accessLookups/{codeHash}": {
+      "schema": { "$ref": "#/entities/SchoolAccessLookup" },
+      "description": "SHA-256 code lookup entries pointing to role capabilities."
+    },
+    "/schools/{schoolId}/capSections/{capKey}": {
+      "schema": { "$ref": "#/entities/SchoolCapSection" },
+      "description": "Capability-keyed single-section workspace for counselor and admin."
+    },
+    "/schools/{schoolId}/capStudents/{capKey}": {
+      "schema": { "$ref": "#/entities/SchoolCapStudent" },
+      "description": "Capability-keyed read-only personal portal workspace for a single student."
     }
   }
 }

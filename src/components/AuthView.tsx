@@ -160,11 +160,11 @@ export function AuthView({
   }
 
   const card = 'rounded-2xl bg-violet-50 dark:bg-slate-800';
-  const schoolName = publicData?.school.name || schoolDefaults.name;
-  const academicYear = publicData?.school.academicYear || schoolDefaults.year;
-  const directorate = publicData?.school.directorate || '';
-  const coverSrc = publicData?.school.coverDataUrl || schoolDefaults.image;
-  const logoSrc = publicData?.school.logoDataUrl || '';
+  const schoolName = publicData?.school?.name || schoolDefaults.name;
+  const academicYear = publicData?.school?.academicYear || schoolDefaults.year;
+  const directorate = publicData?.school?.directorate || '';
+  const coverSrc = publicData?.school?.coverDataUrl || schoolDefaults.image;
+  const logoSrc = publicData?.school?.logoDataUrl || '';
 
   const announcements = (publicData?.announcements ?? [])
     .filter(item => item.visibility === 'public')
@@ -173,21 +173,21 @@ export function AuthView({
   const infoSections = [
     {
       title: 'عن المدرسة',
-      body: publicData?.school.overview || schoolDefaults.about,
+      body: publicData?.school?.overview || schoolDefaults.about,
       icon: School,
     },
     {
       title: 'رؤيتنا',
-      body: publicData?.school.vision || schoolDefaults.vision,
+      body: publicData?.school?.vision || schoolDefaults.vision,
       icon: Eye,
     },
-    ...(publicData?.school.mission
+    ...(publicData?.school?.mission
       ? [{ title: 'رسالتنا', body: publicData.school.mission, icon: BookOpen }]
       : []),
     {
       title: 'أهدافنا',
       body:
-        publicData?.school.goals && publicData.school.goals.length > 0
+        publicData?.school?.goals && publicData.school.goals.length > 0
           ? publicData.school.goals.join(' · ')
           : schoolDefaults.goals,
       icon: Target,

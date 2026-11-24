@@ -23,6 +23,14 @@ export interface SchoolOfflineStatus {
   lastServerSyncAt: string;
   conflictCount: number;
 }
+export interface CloudSessionPointer {
+  schoolId: string;
+  role: 'counselor' | 'student';
+  sectionId: string;
+  studentId: string;
+  capKey: string;
+  codeHash: string;
+}
 const DB = 'smart-school-counselor-offline-v1';
 const VERSION = 1;
 const syncEvent = 'smart-school-offline-status';
@@ -111,6 +119,25 @@ export async function getCachedSchoolWorkspace(): Promise<SchoolWorkspacePayload
 }
 export async function getCachedSchoolSession(): Promise<SchoolSessionUser | null> {
   return (await getCachedSchoolWorkspace())?.session || null;
+}
+export async function saveCloudSessionPointer(pointer: CloudSessionPointer): Promise<void> {
+  if (pointer.role !== 'counselor' && pointer.role !== 'student') return;
+  await putStore('meta', pointer, 'cloudSessionPointer');
+}
+export async function getCloudSessionPointer(): Promise<CloudSessionPointer | null> {
+  const ptr = await readStore<CloudSessionPointer>('meta', 'cloudSessionPointer');
+  if (!ptr || (ptr.role !== 'counselor' && ptr.role !== 'student') || !ptr.capKey || !ptr.codeHash) {
+    return null;
+  }
+  return ptr;
+}
+export async function clearCloudSessionPointer(): Promise<void> {
+  const db = await openDb();
+  try {
+    const tx = db.transaction('meta', 'readwrite');
+    tx.objectStore('meta').delete('cloudSessionPointer');
+    await txDone(tx);
+  } finally { db.close(); }
 }
 export async function getOfflineStatus(session?: SchoolSessionUser): Promise<SchoolOfflineStatus> {
   const key = session ? scopeKey(session) : await readStore<string>('meta', 'recentScope');

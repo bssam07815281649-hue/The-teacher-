@@ -8,9 +8,11 @@ import {
   testFirestoreConnectivity,
 } from '../../services/schoolFirebaseSync';
 import { restoreBackupApi, updateFirebaseLinkApi } from '../../services/schoolRecordClient';
+import { getInMemoryAdminCode } from '../../services/schoolCloudAdapter';
 
 interface AdminFirebaseModalProps {
   workspace: SchoolWorkspacePayload;
+  adminCode?: string;
   onClose: () => void;
   onSyncMetaUpdated: (meta: SchoolFirebaseSyncMeta) => void;
   onWorkspaceRestored?: () => Promise<void>;
@@ -18,6 +20,7 @@ interface AdminFirebaseModalProps {
 
 export const AdminFirebaseModal: React.FC<AdminFirebaseModalProps> = ({
   workspace,
+  adminCode,
   onClose,
   onSyncMetaUpdated,
   onWorkspaceRestored,
@@ -55,7 +58,11 @@ export const AdminFirebaseModal: React.FC<AdminFirebaseModalProps> = ({
     setSuccessMsg('');
     try {
       const linked = await linkGoogleForPrincipal();
-      const syncedMeta = await syncWorkspaceToFirestore(workspace);
+      const effectiveCode = adminCode || getInMemoryAdminCode();
+      const syncedMeta = await syncWorkspaceToFirestore(
+        workspace,
+        effectiveCode ? { adminCode: effectiveCode } : undefined
+      );
       const saved = await updateFirebaseLinkApi({
         ...syncedMeta,
         linkedUid: linked.uid,
@@ -77,7 +84,11 @@ export const AdminFirebaseModal: React.FC<AdminFirebaseModalProps> = ({
     setError('');
     setSuccessMsg('');
     try {
-      const syncedMeta = await syncWorkspaceToFirestore(workspace);
+      const effectiveCode = adminCode || getInMemoryAdminCode();
+      const syncedMeta = await syncWorkspaceToFirestore(
+        workspace,
+        effectiveCode ? { adminCode: effectiveCode } : undefined
+      );
       const saved = await updateFirebaseLinkApi(syncedMeta);
       onSyncMetaUpdated(saved);
       setSuccessMsg('تم تحديث النسخة السحابية للمدرسة على نفس الجيميل.');

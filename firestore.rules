@@ -849,6 +849,195 @@ service cloud.firestore {
         && data.timestamp is timestamp;
     }
 
+    function isValidHex64(s) {
+      return s is string && s.size() == 64 && s.matches('^[a-f0-9]{64}$');
+    }
+
+    function isEmptyOrHex64(s) {
+      return s is string && (s == '' || isValidHex64(s));
+    }
+
+    function isStringMax(s, maxLen) {
+      return s is string && s.size() <= maxLen;
+    }
+
+    function isValidSchoolPublicInfo(data, schoolId, docId) {
+      return docId == 'info'
+        && data.id is string
+        && data.id == 'info'
+        && data.schoolId is string
+        && data.schoolId == schoolId
+        && isValidId(data.schoolId)
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 200
+        && data.academicYear is string
+        && data.academicYear.size() >= 1
+        && data.academicYear.size() <= 40
+        && data.directorate is string
+        && data.directorate.size() >= 1
+        && data.directorate.size() <= 160
+        && isOptionalString(data, 'logoDataUrl', 350000)
+        && isOptionalString(data, 'coverDataUrl', 450000)
+        && isOptionalString(data, 'overview', 4000)
+        && isOptionalString(data, 'vision', 2000)
+        && isOptionalString(data, 'mission', 2000)
+        && (!('goals' in data) || (data.goals is list && data.goals.size() <= 30 && (data.goals.size() == 0 || data.goals[0] is string)))
+        && (!('announcements' in data) || (data.announcements is list && data.announcements.size() <= 100 && (data.announcements.size() == 0 || data.announcements[0] is map)))
+        && data.stagesCount is int
+        && data.stagesCount >= 0
+        && data.stagesCount <= 200
+        && data.sectionsCount is int
+        && data.sectionsCount >= 0
+        && data.sectionsCount <= 500
+        && data.adminCodeConfigured is bool
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSchoolAdminSecurity(data, schoolId, docId) {
+      return docId == 'config'
+        && data.id is string
+        && data.id == 'config'
+        && data.schoolId is string
+        && data.schoolId == schoolId
+        && isValidId(data.schoolId)
+        && data.ownerUid is string
+        && isValidId(data.ownerUid)
+        && data.hash is string
+        && data.hash.size() >= 64
+        && data.hash.size() <= 128
+        && data.hash.matches('^[a-f0-9]{64,128}$')
+        && data.salt is string
+        && data.salt.size() >= 16
+        && data.salt.size() <= 64
+        && data.salt.matches('^[a-f0-9]{16,64}$')
+        && data.iterations is int
+        && data.iterations >= 10000
+        && data.iterations <= 1000000
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSchoolSectionLock(data, schoolId, sectionId) {
+      return data.id is string
+        && data.id == sectionId
+        && isValidId(data.id)
+        && data.schoolId is string
+        && data.schoolId == schoolId
+        && isValidId(data.schoolId)
+        && data.ownerUid is string
+        && isValidId(data.ownerUid)
+        && data.sectionId is string
+        && data.sectionId == sectionId
+        && isEmptyOrHex64(data.counselorCodeHash)
+        && isEmptyOrHex64(data.sectionCapKey)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSchoolAccessLookup(data, schoolId, codeHash) {
+      return isValidHex64(codeHash)
+        && data.codeHash is string
+        && data.codeHash == codeHash
+        && data.schoolId is string
+        && data.schoolId == schoolId
+        && isValidId(data.schoolId)
+        && data.ownerUid is string
+        && isValidId(data.ownerUid)
+        && data.role in ['admin_gate', 'counselor', 'student']
+        && isStringMax(data.sectionId, 128)
+        && isStringMax(data.studentId, 128)
+        && isEmptyOrHex64(data.capabilityKey)
+        && isStringMax(data.displayName, 160)
+        && isStringMax(data.sectionName, 160)
+        && isStringMax(data.stageName, 160)
+        && data.status in ['active', 'revoked']
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSchoolCapSection(data, schoolId, capKey) {
+      return isValidHex64(capKey)
+        && data.capKey is string
+        && data.capKey == capKey
+        && data.schoolId is string
+        && data.schoolId == schoolId
+        && isValidId(data.schoolId)
+        && data.ownerUid is string
+        && isValidId(data.ownerUid)
+        && data.sectionId is string
+        && isValidId(data.sectionId)
+        && data.stageId is string
+        && isValidId(data.stageId)
+        && isEmptyOrHex64(data.counselorCodeHash)
+        && data.school is map
+        && data.stages is list
+        && data.stages.size() <= 200
+        && (data.stages.size() == 0 || data.stages[0] is map)
+        && data.announcements is list
+        && data.announcements.size() <= 150
+        && (data.announcements.size() == 0 || data.announcements[0] is map)
+        && data.section is map
+        && data.students is list
+        && data.students.size() <= 400
+        && (data.students.size() == 0 || data.students[0] is map)
+        && data.absences is list
+        && data.absences.size() <= 1000
+        && (data.absences.size() == 0 || data.absences[0] is map)
+        && data.subjects is list
+        && data.subjects.size() <= 150
+        && (data.subjects.size() == 0 || data.subjects[0] is map)
+        && data.templates is list
+        && data.templates.size() <= 100
+        && (data.templates.size() == 0 || data.templates[0] is map)
+        && data.pendingAuditLogs is list
+        && data.pendingAuditLogs.size() <= 400
+        && (data.pendingAuditLogs.size() == 0 || data.pendingAuditLogs[0] is map)
+        && data.announcementReads is map
+        && isStringMax(data.counselorEditedAt, 40)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSchoolCapStudent(data, schoolId, capKey) {
+      return isValidHex64(capKey)
+        && data.capKey is string
+        && data.capKey == capKey
+        && data.schoolId is string
+        && data.schoolId == schoolId
+        && isValidId(data.schoolId)
+        && data.ownerUid is string
+        && isValidId(data.ownerUid)
+        && data.sectionId is string
+        && isValidId(data.sectionId)
+        && data.studentId is string
+        && isValidId(data.studentId)
+        && data.school is map
+        && data.stages is list
+        && data.stages.size() <= 200
+        && (data.stages.size() == 0 || data.stages[0] is map)
+        && data.section is map
+        && data.student is map
+        && data.absences is list
+        && data.absences.size() <= 400
+        && (data.absences.size() == 0 || data.absences[0] is map)
+        && data.subjects is list
+        && data.subjects.size() <= 150
+        && (data.subjects.size() == 0 || data.subjects[0] is map)
+        && data.announcements is list
+        && data.announcements.size() <= 150
+        && (data.announcements.size() == 0 || data.announcements[0] is map)
+        && data.updatedAt is timestamp;
+    }
+
+    function isCounselorAtomicSectionWrite(schoolId, sectionId, targetOwnerUid) {
+      return isValidId(schoolId)
+        && isValidId(sectionId)
+        && exists(/databases/$(database)/documents/schools/$(schoolId)/sectionLocks/$(sectionId))
+        && get(/databases/$(database)/documents/schools/$(schoolId)/sectionLocks/$(sectionId)).data.ownerUid == targetOwnerUid
+        && isValidHex64(get(/databases/$(database)/documents/schools/$(schoolId)/sectionLocks/$(sectionId)).data.counselorCodeHash)
+        && isValidHex64(get(/databases/$(database)/documents/schools/$(schoolId)/sectionLocks/$(sectionId)).data.sectionCapKey)
+        && exists(/databases/$(database)/documents/schools/$(schoolId)/capSections/$(get(/databases/$(database)/documents/schools/$(schoolId)/sectionLocks/$(sectionId)).data.sectionCapKey))
+        && get(/databases/$(database)/documents/schools/$(schoolId)/capSections/$(get(/databases/$(database)/documents/schools/$(schoolId)/sectionLocks/$(sectionId)).data.sectionCapKey)).data.counselorCodeHash == get(/databases/$(database)/documents/schools/$(schoolId)/sectionLocks/$(sectionId)).data.counselorCodeHash
+        && getAfter(/databases/$(database)/documents/schools/$(schoolId)/capSections/$(get(/databases/$(database)/documents/schools/$(schoolId)/sectionLocks/$(sectionId)).data.sectionCapKey)).data.updatedAt == request.time;
+    }
+
     match /schools/{schoolId} {
       allow get: if isValidId(schoolId)
         && isVerifiedUser()
@@ -1150,6 +1339,177 @@ service cloud.firestore {
           && isValidSchoolAuditLog(incoming(), schoolId, logId)
           && incoming().timestamp == request.time;
         allow update, delete: if false;
+      }
+
+      match /public/{docId} {
+        allow get: if isValidId(schoolId) && docId == 'info';
+        allow list: if false;
+        allow create: if isSchoolAdminMember(schoolId)
+          && docId == 'info'
+          && incoming().keys().hasAll(['id', 'schoolId', 'name', 'academicYear', 'directorate', 'stagesCount', 'sectionsCount', 'adminCodeConfigured', 'updatedAt'])
+          && incoming().keys().hasOnly(['id', 'schoolId', 'name', 'academicYear', 'directorate', 'logoDataUrl', 'coverDataUrl', 'overview', 'vision', 'mission', 'goals', 'announcements', 'stagesCount', 'sectionsCount', 'adminCodeConfigured', 'updatedAt'])
+          && isValidSchoolPublicInfo(incoming(), schoolId, docId)
+          && incoming().updatedAt == request.time;
+        allow update: if isSchoolAdminMember(schoolId)
+          && docId == 'info'
+          && incoming().keys().hasAll(['id', 'schoolId', 'name', 'academicYear', 'directorate', 'stagesCount', 'sectionsCount', 'adminCodeConfigured', 'updatedAt'])
+          && incoming().keys().hasOnly(['id', 'schoolId', 'name', 'academicYear', 'directorate', 'logoDataUrl', 'coverDataUrl', 'overview', 'vision', 'mission', 'goals', 'announcements', 'stagesCount', 'sectionsCount', 'adminCodeConfigured', 'updatedAt'])
+          && isValidSchoolPublicInfo(incoming(), schoolId, docId)
+          && incoming().id == existing().id
+          && incoming().schoolId == existing().schoolId
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'academicYear', 'directorate', 'logoDataUrl', 'coverDataUrl', 'overview', 'vision', 'mission', 'goals', 'announcements', 'stagesCount', 'sectionsCount', 'adminCodeConfigured', 'updatedAt']);
+        allow delete: if isSchoolAdminMember(schoolId) && docId == 'info';
+      }
+
+      match /adminSecurity/{docId} {
+        allow get: if isValidId(schoolId) && docId == 'config' && isSchoolAdminMember(schoolId);
+        allow list: if false;
+        allow create: if isSchoolAdminMember(schoolId)
+          && docId == 'config'
+          && incoming().ownerUid == request.auth.uid
+          && incoming().keys().hasAll(['id', 'schoolId', 'ownerUid', 'hash', 'salt', 'iterations', 'updatedAt'])
+          && incoming().keys().hasOnly(['id', 'schoolId', 'ownerUid', 'hash', 'salt', 'iterations', 'updatedAt'])
+          && isValidSchoolAdminSecurity(incoming(), schoolId, docId)
+          && incoming().updatedAt == request.time;
+        allow update: if isSchoolAdminMember(schoolId)
+          && docId == 'config'
+          && isValidSchoolAdminSecurity(incoming(), schoolId, docId)
+          && incoming().id == existing().id
+          && incoming().schoolId == existing().schoolId
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['hash', 'salt', 'iterations', 'updatedAt']);
+        allow delete: if false;
+      }
+
+      match /sectionLocks/{sectionId} {
+        allow get: if isValidId(schoolId) && isValidId(sectionId) && isSchoolAdminMember(schoolId);
+        allow list: if isVerifiedUser() && resource.data.ownerUid == request.auth.uid;
+        allow create: if isSchoolAdminMember(schoolId)
+          && isValidId(sectionId)
+          && incoming().ownerUid == request.auth.uid
+          && incoming().keys().hasAll(['id', 'schoolId', 'ownerUid', 'sectionId', 'counselorCodeHash', 'sectionCapKey', 'updatedAt'])
+          && incoming().keys().hasOnly(['id', 'schoolId', 'ownerUid', 'sectionId', 'counselorCodeHash', 'sectionCapKey', 'updatedAt'])
+          && isValidSchoolSectionLock(incoming(), schoolId, sectionId)
+          && incoming().updatedAt == request.time;
+        allow update: if isSchoolAdminMember(schoolId)
+          && isValidId(sectionId)
+          && isValidSchoolSectionLock(incoming(), schoolId, sectionId)
+          && incoming().id == existing().id
+          && incoming().schoolId == existing().schoolId
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().sectionId == existing().sectionId
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['counselorCodeHash', 'sectionCapKey', 'updatedAt']);
+        allow delete: if isSchoolAdminMember(schoolId) && isValidId(sectionId);
+      }
+
+      match /accessLookups/{codeHash} {
+        allow get: if isValidId(schoolId) && isValidHex64(codeHash);
+        allow list: if false;
+        allow create: if isValidId(schoolId)
+          && isValidHex64(codeHash)
+          && (
+            (isSchoolAdminMember(schoolId) && incoming().ownerUid == request.auth.uid)
+            || (incoming().role == 'student' && isCounselorAtomicSectionWrite(schoolId, incoming().sectionId, incoming().ownerUid))
+          )
+          && incoming().keys().hasAll(['codeHash', 'schoolId', 'ownerUid', 'role', 'sectionId', 'studentId', 'capabilityKey', 'displayName', 'sectionName', 'stageName', 'status', 'updatedAt'])
+          && incoming().keys().hasOnly(['codeHash', 'schoolId', 'ownerUid', 'role', 'sectionId', 'studentId', 'capabilityKey', 'displayName', 'sectionName', 'stageName', 'status', 'updatedAt'])
+          && isValidSchoolAccessLookup(incoming(), schoolId, codeHash)
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(schoolId)
+          && isValidHex64(codeHash)
+          && (
+            isSchoolAdminMember(schoolId)
+            || (existing().role == 'student' && incoming().role == 'student' && isCounselorAtomicSectionWrite(schoolId, existing().sectionId, existing().ownerUid))
+          )
+          && isValidSchoolAccessLookup(incoming(), schoolId, codeHash)
+          && incoming().codeHash == existing().codeHash
+          && incoming().schoolId == existing().schoolId
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().role == existing().role
+          && incoming().sectionId == existing().sectionId
+          && incoming().studentId == existing().studentId
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['capabilityKey', 'displayName', 'sectionName', 'stageName', 'status', 'updatedAt']);
+        allow delete: if isValidId(schoolId)
+          && isValidHex64(codeHash)
+          && (
+            isSchoolAdminMember(schoolId)
+            || (existing().role == 'student' && isCounselorAtomicSectionWrite(schoolId, existing().sectionId, existing().ownerUid))
+          );
+      }
+
+      match /capSections/{capKey} {
+        allow get: if isValidId(schoolId) && isValidHex64(capKey);
+        allow list: if isVerifiedUser() && resource.data.ownerUid == request.auth.uid;
+        allow create: if isSchoolAdminMember(schoolId)
+          && isValidHex64(capKey)
+          && incoming().ownerUid == request.auth.uid
+          && incoming().keys().hasAll(['capKey', 'schoolId', 'ownerUid', 'sectionId', 'stageId', 'counselorCodeHash', 'school', 'stages', 'announcements', 'section', 'students', 'absences', 'subjects', 'templates', 'pendingAuditLogs', 'announcementReads', 'counselorEditedAt', 'updatedAt'])
+          && incoming().keys().hasOnly(['capKey', 'schoolId', 'ownerUid', 'sectionId', 'stageId', 'counselorCodeHash', 'school', 'stages', 'announcements', 'section', 'students', 'absences', 'subjects', 'templates', 'pendingAuditLogs', 'announcementReads', 'counselorEditedAt', 'updatedAt'])
+          && isValidSchoolCapSection(incoming(), schoolId, capKey)
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(schoolId)
+          && isValidHex64(capKey)
+          && isValidSchoolCapSection(incoming(), schoolId, capKey)
+          && incoming().capKey == existing().capKey
+          && incoming().schoolId == existing().schoolId
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().sectionId == existing().sectionId
+          && incoming().updatedAt == request.time
+          && (
+            (
+              isSchoolAdminMember(schoolId)
+              && incoming().diff(existing()).affectedKeys().hasOnly(['stageId', 'counselorCodeHash', 'school', 'stages', 'announcements', 'section', 'students', 'absences', 'subjects', 'templates', 'pendingAuditLogs', 'announcementReads', 'counselorEditedAt', 'updatedAt'])
+            )
+            || (
+              isValidHex64(existing().counselorCodeHash)
+              && incoming().stageId == existing().stageId
+              && incoming().counselorCodeHash == existing().counselorCodeHash
+              && incoming().school == existing().school
+              && incoming().stages == existing().stages
+              && incoming().announcements == existing().announcements
+              && incoming().diff(existing()).affectedKeys().hasOnly(['section', 'students', 'absences', 'subjects', 'templates', 'pendingAuditLogs', 'announcementReads', 'counselorEditedAt', 'updatedAt'])
+            )
+          );
+        allow delete: if isSchoolAdminMember(schoolId) && isValidHex64(capKey);
+      }
+
+      match /capStudents/{capKey} {
+        allow get: if isValidId(schoolId) && isValidHex64(capKey);
+        allow list: if isVerifiedUser() && resource.data.ownerUid == request.auth.uid;
+        allow create: if isValidId(schoolId)
+          && isValidHex64(capKey)
+          && (
+            (isSchoolAdminMember(schoolId) && incoming().ownerUid == request.auth.uid)
+            || isCounselorAtomicSectionWrite(schoolId, incoming().sectionId, incoming().ownerUid)
+          )
+          && incoming().keys().hasAll(['capKey', 'schoolId', 'ownerUid', 'sectionId', 'studentId', 'school', 'stages', 'section', 'student', 'absences', 'subjects', 'announcements', 'updatedAt'])
+          && incoming().keys().hasOnly(['capKey', 'schoolId', 'ownerUid', 'sectionId', 'studentId', 'school', 'stages', 'section', 'student', 'absences', 'subjects', 'announcements', 'updatedAt'])
+          && isValidSchoolCapStudent(incoming(), schoolId, capKey)
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(schoolId)
+          && isValidHex64(capKey)
+          && (
+            isSchoolAdminMember(schoolId)
+            || isCounselorAtomicSectionWrite(schoolId, existing().sectionId, existing().ownerUid)
+          )
+          && isValidSchoolCapStudent(incoming(), schoolId, capKey)
+          && incoming().capKey == existing().capKey
+          && incoming().schoolId == existing().schoolId
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().sectionId == existing().sectionId
+          && incoming().studentId == existing().studentId
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['school', 'stages', 'section', 'student', 'absences', 'subjects', 'announcements', 'updatedAt']);
+        allow delete: if isValidId(schoolId)
+          && isValidHex64(capKey)
+          && (
+            isSchoolAdminMember(schoolId)
+            || isCounselorAtomicSectionWrite(schoolId, existing().sectionId, existing().ownerUid)
+          );
       }
     }
   }
