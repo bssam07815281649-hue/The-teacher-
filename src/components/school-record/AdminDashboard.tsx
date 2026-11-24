@@ -559,7 +559,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {(
           [
             { id: 'structure', label: 'الصفوف والشعب والمرشدون', icon: Layers },
-            { id:'notices',label:'تبليغات المرشدين',icon:BookOpen },
+            { id:'notices',label:'إعلانات المدرسة وتبليغات المرشدين',icon:BookOpen },
             { id: 'profile', label: 'ملف المدرسة', icon: Building2 },
             { id: 'audit_backup', label: 'سجل التدقيق والنسخ الاحتياطي والأمان', icon: History },
           ] as { id: AdminTab; label: string; icon: React.ComponentType<{ className?: string }> }[]
