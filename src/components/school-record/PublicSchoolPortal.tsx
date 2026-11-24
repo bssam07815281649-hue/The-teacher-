@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Building2,
+  Download,
   Calendar,
   Eye,
   EyeOff,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 import type { SchoolPublicPayload, SchoolSessionUser } from '../../types';
 import { clearSchoolSessionToken, loginSchoolWithCode } from '../../services/schoolRecordClient';
+import { canPromptPwaInstall, requestPwaInstall, subscribePwaInstall } from '../../services/pwaInstall';
 
 interface PublicSchoolPortalProps {
   publicData: SchoolPublicPayload;
@@ -33,6 +35,17 @@ export const PublicSchoolPortal: React.FC<PublicSchoolPortalProps> = ({
   const [showCode, setShowCode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [canInstall, setCanInstall] = useState(canPromptPwaInstall);
+  const [installHelp, setInstallHelp] = useState(false);
+
+  useEffect(() => subscribePwaInstall(() => setCanInstall(canPromptPwaInstall())), []);
+
+  const handleInstall = async () => {
+    if (!canInstall) { setInstallHelp(true); return; }
+    const result = await requestPwaInstall();
+    if (result === 'unavailable') setInstallHelp(true);
+  };
+
 
   const { school, stagesCount, sectionsCount, adminCodeConfigured } = publicData;
 
@@ -67,6 +80,20 @@ export const PublicSchoolPortal: React.FC<PublicSchoolPortalProps> = ({
 
   return (
     <div className="space-y-6">
+      <section className="flex flex-col gap-2 rounded-2xl border border-violet-200 bg-violet-50 p-3 dark:border-violet-900 dark:bg-violet-950/30 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-extrabold text-[#4320D9] dark:text-violet-200">المعلم الذكي كتطبيق على هاتفك</p>
+          <p className="text-xs text-slate-600 dark:text-slate-300">ثبّت التطبيق من Chrome وافتح بوابة المدرسة مباشرة، بدون تنزيل APK.</p>
+        </div>
+        <button type="button" onClick={() => void handleInstall()}
+          className="flex min-h-[44px] w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#653CF5] px-4 text-sm font-bold text-white sm:w-auto">
+          <Download className="h-4 w-4" /> تثبيت التطبيق
+        </button>
+        {installHelp && <p role="status" className="text-xs text-slate-700 dark:text-slate-200 sm:max-w-[240px]">
+          من قائمة Chrome (⋮) اختر «إضافة إلى الشاشة الرئيسية» ثم «تثبيت التطبيق». يتطلب رابط HTTPS ودعم المتصفح.
+        </p>}
+      </section>
+
       {/* School Hero Card */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
         <div className="relative h-36 sm:h-48 bg-gradient-to-l from-[#653CF5] via-[#532CE8] to-[#4320D9]">
