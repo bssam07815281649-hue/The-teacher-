@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { SchoolSection, SchoolWorkspacePayload } from '../../types';
-import { acknowledgeSchoolNotice, saveSectionAction, upsertAnnouncementApi } from '../../services/schoolRecordClient';
+import { acknowledgeSchoolNotice, deleteAnnouncementApi, saveSectionAction, upsertAnnouncementApi } from '../../services/schoolRecordClient';
 
 type Props = { mode: 'cases'|'mail'|'notices'|'admin'; workspace: SchoolWorkspacePayload; section?: SchoolSection; refresh: ()=>Promise<void> };
 const field = 'block w-full min-w-0 max-w-full rounded-lg border bg-transparent p-3';
@@ -9,6 +9,39 @@ export function StaffPanel({mode, workspace, section, refresh}: Props) {
   const [name,setName]=useState(''), [body,setBody]=useState(''), [target,setTarget]=useState('');
   const [ids,setIds]=useState<string[]>([]), [busy,setBusy]=useState(false), [status,setStatus]=useState('');
   const [openNoticeId, setOpenNoticeId] = useState<string | null>(null);
+  const [publicTitle,setPublicTitle] = useState('');
+  const [publicBody,setPublicBody] = useState('');
+  const [publicPinned,setPublicPinned] = useState(false);
+  const [editingPublicId,setEditingPublicId] = useState<string | null>(null);
+  const publicNotices = workspace.announcements
+    .filter(a => a.visibility === 'public')
+    .slice().sort((a,b) => Number(b.pinned)-Number(a.pinned) || b.createdAt.localeCompare(a.createdAt));
+
+  async function savePublicNotice(e: React.FormEvent) {
+    e.preventDefault();
+    if (busy || !publicTitle.trim() || !publicBody.trim()) return;
+    setBusy(true); setStatus('');
+    try {
+      await upsertAnnouncementApi({
+        id: editingPublicId || undefined,
+        title: publicTitle.trim(), body: publicBody.trim(),
+        pinned: publicPinned, visibility: 'public',
+      });
+      await refresh();
+      setEditingPublicId(null); setPublicTitle(''); setPublicBody(''); setPublicPinned(false);
+      setStatus('تم نشر إعلان المدرسة. سيظهر فوق حقل تسجيل الدخول.');
+    } catch (err) { setStatus(err instanceof Error ? err.message : 'تعذر نشر الإعلان'); }
+    finally { setBusy(false); }
+  }
+
+  async function removePublicNotice(id: string) {
+    if (busy || !window.confirm('هل تريد حذف إعلان المدرسة؟ سيختفي من صفحة الدخول.')) return;
+    setBusy(true); setStatus('');
+    try { await deleteAnnouncementApi(id); await refresh(); setStatus('تم حذف الإعلان.'); }
+    catch (err) { setStatus(err instanceof Error ? err.message : 'تعذر حذف الإعلان'); }
+    finally { setBusy(false); }
+  }
+
   const students=workspace.students.filter(s=>s.sectionId===section?.id);
   const group=section?.caseGroups?.find(g=>g.name===target);
   async function submit(action:()=>Promise<unknown>) {
@@ -32,7 +65,49 @@ export function StaffPanel({mode, workspace, section, refresh}: Props) {
       {(section.messages||[]).filter(m=>m.studentId===(target==='*'?undefined:target)).slice().reverse().map(m=><p className="border-t py-2 whitespace-pre-wrap" key={m.id}>{new Date(m.createdAt).toLocaleDateString('ar-IQ')} · {m.body}</p>)}</>}
     </>}
     {(mode==='notices'||mode==='admin') && <div className="space-y-4">
-      <h2 className="text-lg font-extrabold">تبليغات المرشدين</h2>
+      {mode === 'admin' && <div className="space-y-4 rounded-xl border border-sky-200 bg-sky-50/60 p-3 dark:border-sky-900 dark:bg-sky-950/20">
+        <div>
+          <h2 className="text-lg font-extrabold text-sky-950 dark:text-sky-100">إعلانات المدرسة</h2>
+          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+            الإعلان العام يظهر فوق خانة تسجيل الدخول لجميع الزائرين. إذا ماكو إعلانات منشورة، ما تظهر أي خانة إعلانات.
+          </p>
+        </div>
+        <form onSubmit={e => void savePublicNotice(e)} className="space-y-2">
+          <input required maxLength={200} aria-label="عنوان إعلان المدرسة"
+            className={field} placeholder="عنوان إعلان المدرسة" value={publicTitle}
+            onChange={e=>setPublicTitle(e.target.value)}/>
+          <textarea required maxLength={4000} rows={3} aria-label="نص إعلان المدرسة"
+            className={field} placeholder="اكتب الإعلان الذي سيظهر للطلاب فوق تسجيل الدخول"
+            value={publicBody} onChange={e=>setPublicBody(e.target.value)}/>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={publicPinned} onChange={e=>setPublicPinned(e.target.checked)}/>
+            تثبيت الإعلان في الأعلى
+          </label>
+          <button type="submit" className={button} disabled={busy || !publicTitle.trim() || !publicBody.trim()}>
+            {editingPublicId ? 'حفظ تعديل الإعلان' : 'نشر إعلان المدرسة'}
+          </button>
+          {editingPublicId && <button type="button" className="w-full rounded-lg border p-2 text-sm"
+            onClick={()=>{setEditingPublicId(null);setPublicTitle('');setPublicBody('');setPublicPinned(false);}}>
+              إلغاء التعديل
+            </button>}
+        </form>
+        {publicNotices.length > 0 && <div className="space-y-2 border-t border-sky-200 pt-3">
+          <h3 className="font-bold">الإعلانات المنشورة ({publicNotices.length})</h3>
+          {publicNotices.map(a => <article key={a.id} className="min-w-0 space-y-2 rounded-xl bg-white p-3 dark:bg-slate-900">
+            <h4 className="break-words font-extrabold">{a.pinned ? '📌 ' : ''}{a.title}</h4>
+            <p className="whitespace-pre-wrap break-words text-sm">{a.body}</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="min-h-[40px] flex-1 rounded-lg border px-3 text-sm" disabled={busy}
+                onClick={()=>{setEditingPublicId(a.id);setPublicTitle(a.title);setPublicBody(a.body);setPublicPinned(Boolean(a.pinned));}}>
+                تعديل
+              </button>
+              <button type="button" className="min-h-[40px] flex-1 rounded-lg bg-red-50 px-3 text-sm text-red-700 dark:bg-red-950/30" disabled={busy}
+                onClick={()=>void removePublicNotice(a.id)}>حذف</button>
+            </div>
+          </article>)}
+        </div>}
+      </div>}
+      <h2 className="border-t pt-4 text-lg font-extrabold">{mode === 'admin' ? 'تبليغات المرشدين (خاصة)' : 'تبليغات المرشدين'}</h2>
       {mode==='admin' && <form className="space-y-2" onSubmit={e=>{e.preventDefault();void submit(()=>upsertAnnouncementApi({title:name,body,visibility:'internal'}));}}>
         <input required className={field} placeholder="عنوان البلاغ" value={name} onChange={e=>setName(e.target.value)}/>
         <textarea required className={field} placeholder="اكتب البلاغ للمرشدين" value={body} onChange={e=>setBody(e.target.value)}/>

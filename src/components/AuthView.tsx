@@ -67,15 +67,21 @@ export function AuthView({
 
   useEffect(() => {
     let active = true;
-    void fetchSchoolPublic()
-      .then((res) => {
-        if (active) setPublicData(res);
-      })
-      .catch(() => {
-        // Keep school-home.json defaults silently when offline
-      });
+    const refresh = () => {
+      if (document.visibilityState === 'hidden') return;
+      void fetchSchoolPublic()
+        .then(res => { if (active) setPublicData(res); })
+        .catch(() => { /* Preserve the last known public information while offline. */ });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 15000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
     return () => {
       active = false;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
     };
   }, []);
 
@@ -167,7 +173,7 @@ export function AuthView({
   const logoSrc = publicData?.school?.logoDataUrl || '';
 
   const announcements = (publicData?.announcements ?? [])
-    .filter(item => item.visibility === 'public')
+    .filter(item => item.visibility === 'public' && item.title?.trim() && item.body?.trim())
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt.localeCompare(a.createdAt));
 
   const infoSections = [
