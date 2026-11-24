@@ -291,7 +291,9 @@ export class SchoolRecordStore {
   private warnedInvalidAdminEmailEnv = false;
 
   constructor(dataDirOverride?: string) {
-    this.baseDir = path.resolve(dataDirOverride || path.join(process.cwd(), '.school-record-data'));
+    // On a hosted Node server this must point to a mounted, persistent volume.
+    // Never fall back to an ephemeral path when the operator has configured one.
+    this.baseDir = path.resolve(dataDirOverride || process.env.SCHOOL_DATA_DIR || path.join(process.cwd(), '.school-record-data'));
     this.backupsDir = this.resolveSafePath('backups');
     this.storeFilePath = this.resolveSafePath('store.json');
     this.sessionSecretPath = this.resolveSafePath('.session-secret');

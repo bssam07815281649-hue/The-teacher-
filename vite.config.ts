@@ -5,6 +5,10 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    // GitHub Pages uses a repository subpath; hosted Studio/custom domains use /.
+    base: process.env.GITHUB_PAGES === 'true'
+      ? '/The-teacher-/'
+      : (process.env.VITE_PUBLIC_BASE_PATH || '/'),
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
