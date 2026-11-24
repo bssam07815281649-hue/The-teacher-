@@ -82,7 +82,7 @@ export const PublicSchoolPortal: React.FC<PublicSchoolPortalProps> = ({
     <div className="space-y-6">
       <section className="flex flex-col gap-2 rounded-2xl border border-violet-200 bg-violet-50 p-3 dark:border-violet-900 dark:bg-violet-950/30 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="text-sm font-extrabold text-[#4320D9] dark:text-violet-200">المعلم الذكي كتطبيق على هاتفك</p>
+          <p className="text-sm font-extrabold text-[#4320D9] dark:text-violet-200">السجل كتطبيق على هاتفك</p>
           <p className="text-xs text-slate-600 dark:text-slate-300">ثبّت التطبيق من Chrome وافتح بوابة المدرسة مباشرة، بدون تنزيل APK.</p>
         </div>
         <button type="button" onClick={() => void handleInstall()}
